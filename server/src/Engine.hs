@@ -19,3 +19,9 @@ handlePlayerCommand DropBomb player scene =
       _droppedAt = view clock scene
       newBomb = Bomb {..}
   in over bombs (newBomb :) scene
+
+update :: ServerMessage -> Scene -> Scene
+update (PlayerMessage command player) scene = handlePlayerCommand command player scene
+update (Tick t) scene =
+  -- TODO Expire bombs.
+  set clock t scene

@@ -22,7 +22,7 @@ app = StartApp.start {init = State.init
                                                     newEffects = State.effect action newModel
                                                 in (newModel, newEffects)
                      ,inputs = [Signal.map (NewScene << Json.decodeString decodeScene)
-                                           (WS.connect "ws://localhost:8000" (constant ""))]}
+                                           (WS.connect "ws://localhost:8080" (constant ""))]}
 
 main : Signal Html
 main = app.html

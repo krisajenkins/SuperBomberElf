@@ -4,11 +4,17 @@ import Html exposing (..)
 import Types exposing (..)
 import Signal exposing (Address)
 
+playerView : Player -> Html
+playerView player =
+  div []
+      [code []
+            [Html.text (Maybe.withDefault "UNNAMED" player.name)]]
+
 sceneView : Scene -> Address Action -> Html
 sceneView scene address =
   div []
       [code []
-            [Html.text <| toString scene]]
+            (List.map playerView scene.players)]
 
 root : Model -> Address Action -> Html
 root model address =

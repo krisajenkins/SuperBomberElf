@@ -7,7 +7,7 @@ type alias Position =
   ,y : Int}
 
 type alias Player =
-  {name : String
+  {name : Maybe String
   ,position : Position}
 
 type alias Scene =
@@ -28,7 +28,7 @@ decodePosition =
 decodePlayer : Decoder Player
 decodePlayer =
   object2 Player
-    ("name" := string)
+    ("name" := maybe string)
     ("position" := decodePosition)
 
 decodeScene : Decoder Scene

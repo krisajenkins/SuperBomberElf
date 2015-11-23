@@ -1,11 +1,23 @@
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes        #-}
+{-# LANGUAGE RecordWildCards   #-}
+{-# LANGUAGE TemplateHaskell   #-}
 module Types where
 
-import           Control.Lens (makeLenses)
+import           Control.Lens (Lens', makeLenses)
 import           Data.Aeson
-import           Data.Text
+import           Data.Map     (Map)
+import qualified Data.Map     as Map
+import           Data.Text    as T
 import           Data.Time
+import           Data.UUID
+
+newtype ClientId =
+  ClientId UUID
+  deriving (Show,Eq,Ord)
+
+instance ToJSON ClientId where
+  toJSON (ClientId uuid) = String . T.pack $ show uuid
 
 data Position =
   Position {_x :: Int
@@ -23,12 +35,12 @@ data Bomb =
 makeLenses ''Bomb
 
 data Player =
-  Player {_playerName     :: Text
+  Player {_playerName     :: Maybe Text
          ,_playerPosition :: Position}
 makeLenses ''Player
 
 data Scene =
-  Scene {_players :: [Player]
+  Scene {_players :: Map ClientId Player
         ,_walls   :: [Wall]
         ,_bombs   :: [Bomb]
         ,_clock   :: UTCTime}
@@ -48,7 +60,7 @@ instance ToJSON Player where
 
 instance ToJSON Scene where
   toJSON Scene{..} =
-    object ["players" .= _players,"walls" .= _walls,"bombs" .= _bombs]
+    object ["players" .= (Map.elems _players),"walls" .= _walls,"bombs" .= _bombs]
 
 data PlayerCommand
   = MoveUp
@@ -57,3 +69,14 @@ data PlayerCommand
   | MoveRight
   | DropBomb
   deriving (Eq,Show)
+
+data ServerMessage
+  = PlayerMessage PlayerCommand (Lens' Scene Player)
+  | Tick UTCTime
+
+initialScene :: UTCTime -> Scene
+initialScene _clock =
+  let _players = Map.empty
+      _walls = []
+      _bombs = []
+  in Scene {..}
