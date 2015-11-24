@@ -7,18 +7,6 @@ import Types exposing (..)
 import Signal exposing (Address)
 import View.Scene exposing (sceneView)
 
--- playerView : Player -> Html
--- playerView player =
---   div []
---       [code []
---             [Html.text (Maybe.withDefault "UNNAMED" player.name)]]
-
--- sceneView : Scene -> Address Action -> Html
--- sceneView scene address =
---   div []
---       [code []
---             (List.map playerView scene.players)]
-
 root : Model -> Address Action -> Html
 root model address =
   div []
@@ -28,11 +16,7 @@ root model address =
       ,case model.scene of
         Just (Ok scene) -> sceneView scene
         Just (Err e) -> Html.text ("ERROR: " ++ e)
-        Nothing -> i [] [Html.text "Waiting for data..."]
-      ,div []
-           [code []
-                 [Html.text <| toString model]]]
-
+        Nothing -> i [] [Html.text "Waiting for data..."]]
 
 joystick : Address Action -> Html
 joystick address =

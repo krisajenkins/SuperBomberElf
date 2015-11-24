@@ -2,7 +2,7 @@
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE RecordWildCards     #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-module Engine (update,blastRadius) where
+module Engine (update,blastRadius,wallExpired,bombExpired) where
 
 import           Control.Lens
 import           Data.Maybe
@@ -42,26 +42,28 @@ validScene scene =
   in Set.null (playerPositions `Set.intersection` wallPositions)
 
 update :: ServerCommand -> Scene -> Scene
+update (Tick t) scene = scene {_clock = t}
 update (FromPlayer clientId command) scene =
-  let newScene = handlePlayerCommand clientId command scene
-  in if validScene newScene
-        then newScene
-        else scene
-update (Tick t) scene =
-  scene {_clock = t
-        ,_bombs = filter (not . isExpired t) (view bombs scene)}
+  if validScene newScene
+     then newScene
+     else scene
+  where newScene = handlePlayerCommand clientId command scene
 
-isExpired :: UTCTime -> Bomb -> Bool
-isExpired t bomb =
-  isNothing (blastRadius t
-                         (view bombDroppedAt bomb))
+wallExpired :: UTCTime -> Wall -> Bool
+wallExpired t wall =
+  case view wallDiedAt wall of
+    Nothing -> False
+    Just died -> died < t
+
+bombExpired :: UTCTime -> Bomb -> Bool
+bombExpired t = isNothing . blastRadius t . view bombDroppedAt
 
 blastPattern :: [(Int,Int)]
 blastPattern =
   zip [0 ..]
-      ([0,0,0] <> [1 .. 4] <> [5,4 .. 1])
+      (replicate 20 0 <> ([1 .. 5] <> [5,4 .. 1]))
 
 blastRadius :: UTCTime -> UTCTime -> Maybe Int
 blastRadius currentTime droppedTime =
-  let age :: Int = floor . toRational $ diffUTCTime currentTime droppedTime
-  in snd <$> atMay blastPattern age
+  let age :: Int = floor . (*10). toRational $ diffUTCTime currentTime droppedTime
+  in snd <$> atMay (concatMap (replicate 1) blastPattern ) age

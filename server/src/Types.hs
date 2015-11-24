@@ -38,7 +38,8 @@ makeLenses ''WallType
 
 data Wall =
   Wall {_wallType     :: WallType
-       ,_wallPosition :: Position}
+       ,_wallPosition :: Position
+       ,_wallDiedAt   :: Maybe UTCTime}
 makeLenses ''Wall
 
 data Bomb =
@@ -79,20 +80,47 @@ data ServerCommand
   = FromPlayer ClientId PlayerCommand
   | Tick UTCTime
 
+
+wallAt :: WallType -> (Int, Int) -> Wall
+wallAt wt (wx,wy) =
+          Wall {_wallType = wt
+               ,_wallDiedAt = Nothing
+               ,_wallPosition = Position wx wy}
+
+
+outerWalls :: [Wall]
+outerWalls =
+  (wallAt Strong . (,0) <$> [0 .. 10]) <> (wallAt Strong . (,10) <$> [0 .. 10]) <>
+  (wallAt Strong . (0,) <$> [0 .. 10]) <>
+  (wallAt Strong . (10,) <$> [0 .. 10])
+
+poundLevel :: [Wall]
+poundLevel =
+  outerWalls <> (wallAt Weak . (3,) <$> [1 .. 9]) <>
+  (wallAt Weak . (7,) <$> [1 .. 9]) <>
+  (wallAt Weak . (,3) <$> [1 .. 9]) <>
+  (wallAt Weak . (,7) <$> [1 .. 9]) <>
+  (wallAt Weak <$> [(1,5),(5,1),(9,5),(5,9)]) <>
+  (wallAt Weak <$> [(2,2),(2,8),(8,2),(8,8)]) <>
+  (wallAt Strong <$> [(3,3),(7,3),(3,7),(7,7)]) <>
+  [wallAt Strong (5,5)]
+
+simpleLevel :: [Wall]
+simpleLevel =
+  outerWalls <>
+  (wallAt Strong <$>
+   do a <- [2,4,6,8]
+      b <- [2,4,6,8]
+      return (a,b)) <>
+  (wallAt Weak . (,1) <$> [3,7]) <>
+  (wallAt Weak . (,5) <$> [3,7]) <>
+  (wallAt Weak . (,9) <$> [3,7]) <>
+  (wallAt Weak . (,3) <$> [1,5,9]) <>
+  (wallAt Weak . (,7) <$> [1,5,9])
+
 initialScene :: UTCTime -> Scene
 initialScene _clock =
-  let _walls =
-        (wallAt Strong . (,0) <$> [0 .. 10]) <>
-        (wallAt Strong . (,10) <$> [0 .. 10]) <>
-        (wallAt Strong . (0,) <$> [0 .. 10]) <>
-        (wallAt Strong . (10,) <$> [0 .. 10]) <>
-        (wallAt Weak . (3,) <$> [1 .. 9]) <>
-        (wallAt Weak . (7,) <$> [1 .. 9]) <>
-        (wallAt Weak . (,3) <$> [1 .. 9]) <>
-        (wallAt Weak . (,7) <$> [1 .. 9])
+  let _walls = simpleLevel -- poundLevel
       _players = Map.empty
       _bombs = []
   in Scene {..}
-  where wallAt wt (wx,wy) =
-          Wall {_wallType = wt
-               ,_wallPosition = Position wx wy}

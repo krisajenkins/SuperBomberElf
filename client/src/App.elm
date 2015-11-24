@@ -6,6 +6,7 @@ import Html exposing (Html)
 import Task exposing (Task)
 import Effects exposing (Never)
 import View
+import Keyboard
 import Types exposing (..)
 import Signal exposing (constant)
 import Json.Decode as Json
@@ -23,7 +24,10 @@ app = StartApp.start {init = State.init
                                                 in (newModel, newEffects)
                      ,inputs = [Signal.map (NewScene << Json.decodeString decodeScene)
                                            (WS.connect "ws://localhost:8080"
-                                                       websocketMailbox.signal)]}
+                                                       websocketMailbox.signal)
+                                                       ,Signal.map (Message << direction) Keyboard.arrows
+                                                       ,Signal.map (Message << direction) Keyboard.wasd
+                                                       ,Signal.map (always (Message DropBomb)) Keyboard.space]}
 
 main : Signal Html
 main = app.html

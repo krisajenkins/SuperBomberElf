@@ -86,3 +86,12 @@ decodeScene =
 encodePlayerCommand : PlayerCommand -> Value
 encodePlayerCommand command =
    Encode.string (toString command)
+
+direction : { x : Int, y : Int } -> PlayerCommand
+direction d =
+  case (d.x,d.y) of
+    (-1,0) -> West
+    (1,0) -> East
+    (0,-1) -> South
+    (0,1) -> North
+    _ -> NoCommand

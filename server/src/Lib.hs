@@ -12,11 +12,11 @@ import           Control.Exception
 import           Control.Lens           hiding ((.=))
 import           Control.Monad
 import           Data.Aeson
-import qualified Data.Vector            as V
-
 import           Data.Map               (Map)
 import qualified Data.Map               as Map
+import qualified Data.Text              as T
 import           Data.Time
+import qualified Data.Vector            as V
 import           Engine
 import qualified Network.WebSockets     as WS
 import           System.Random
@@ -44,7 +44,6 @@ displayPlayer Player{..} =
          ,("name", toJSON _playerName)]
 
 
-
 displayBomb :: UTCTime -> Bomb -> Value
 displayBomb currentTime Bomb{..} =
   let radius = blastRadius currentTime _bombDroppedAt
@@ -58,33 +57,40 @@ displayWall Wall{..} =
 
 displayScene :: Scene -> Value
 displayScene Scene{..} =
-  object [("players"
+  object [("time",toJSON _clock)
+         ,("bombs"
+          ,(Array $
+            V.fromList
+              (displayBomb _clock <$> filter (not . bombExpired _clock) _bombs)))
+         ,("players"
           ,(Array $ V.fromList (displayPlayer <$> Map.elems _players)))
-         ,("walls",(Array $ V.fromList (displayWall <$> _walls)))
-         ,("time",toJSON _clock)
-         ,("bombs",(Array $ V.fromList (displayBomb _clock <$> _bombs)))]
+         ,("walls"
+          ,(Array $
+            V.fromList
+              (displayWall <$> filter (not . wallExpired _clock) _walls)))]
 
 ------------------------------------------------------------
 
 playerJoins :: TVar Server -> WS.Connection -> IO ClientId
 playerJoins server conn =
-  do clientId <-
+  do (clientId,newServerState) <-
        atomically $
        do serverState <- readTVar server
           let (uuid,_gen') = random (view gen serverState)
               newClientId = ClientId uuid
               newPlayer =
-                Player {_playerName = Nothing
+                Player {_playerName = Just . T.pack $ show uuid
                        ,_playerPosition = Position 1 1}
           modifyTVar
             server
             (over (scene . players)
                   (Map.insert newClientId newPlayer) .
              over clients (Map.insert newClientId conn) . set gen _gen')
-          return newClientId
+          newServerState <- readTVar server
+          return (newClientId,newServerState)
      printf "CONNECTED: %s\n" (show clientId)
-     s <- atomically (view scene <$> readTVar server)
-     sendSceneToConnection s conn
+     sendSceneToConnection (view scene newServerState)
+                           conn
      return clientId
 
 playerLeaves :: TVar Server -> ClientId -> IO ()
@@ -107,8 +113,7 @@ invalidMessageHelp =
           String "Messages must be valid JSON, and plain strings aren't allowed as top-level JSON elements, so everything must be wrapped in a message object. Blame Doug Crockford, not me!"]
 
 playerLoop :: TVar Server -> ClientId  -> IO ()
-playerLoop server clientId =
-  forever $ handleCommandFromPlayer server clientId
+playerLoop server clientId = forever $ handleCommandFromPlayer server clientId
 
 handleCommandFromPlayer :: TVar Server -> ClientId -> IO ()
 handleCommandFromPlayer server clientId =
@@ -174,7 +179,7 @@ runGameServer config =
 gameLoop :: TVar Server -> IO ()
 gameLoop server =
   forever $
-  do _ <- threadDelay (200 * 1000)
+  do _ <- threadDelay (100 * 1000)
      t <- getCurrentTime
      atomically $
        processMessage server

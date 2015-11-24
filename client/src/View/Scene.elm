@@ -2,6 +2,7 @@ module View.Scene where
 
 import Types exposing (..)
 import Svg exposing (..)
+import String
 import Svg.Attributes exposing (..)
 
 wallColor : WallType -> String
@@ -24,7 +25,11 @@ wallView wall =
        []
 
 playerColor : Player -> String
-playerColor _ = "blueviolet"
+playerColor player =
+  player.name
+  |> Maybe.map (String.slice 0 6)
+  |> Maybe.map ((++) "#")
+  |> Maybe.withDefault "black"
 
 bombView : Bomb -> Svg
 bombView bomb =
