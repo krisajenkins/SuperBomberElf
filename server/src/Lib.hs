@@ -63,14 +63,6 @@ playerLeaves server clientId =
                (Map.delete clientId))
      printf "DISCONNECTED: %s\n" (show clientId)
 
-playerWrite :: TVar Server -> ClientId -> IO ()
-playerWrite server clientId =
-  do serverState <- atomically $ readTVar server
-     case view (clients . at clientId) serverState of
-       Nothing -> return ()
-       Just conn -> do WS.send conn (toMessage (view scene serverState))
-                       threadDelay (500 * 1000)
-
 allMessages :: [PlayerMessage]
 allMessages = PlayerMessage <$> [minBound ..]
 
@@ -80,8 +72,15 @@ invalidMessageHelp =
          ,"hint" .=
           String "Messages must be valid JSON, and plain strings aren't allowed as top-level JSON elements, so everything must be wrapped in a message object. Blame Doug Crockford, not me!"]
 
-playerRead :: TVar Server -> ClientId  -> IO ()
-playerRead server clientId =
+playerLoop :: TVar Server -> ClientId  -> IO ()
+playerLoop server clientId =
+  forever $
+  do handleCommandFromPlayer server clientId
+     sendBoardToPlayer server clientId
+     threadDelay (100 * 1000)
+
+handleCommandFromPlayer :: TVar Server -> ClientId -> IO ()
+handleCommandFromPlayer server clientId =
   do serverState <- atomically $ readTVar server
      let (Just conn) = view (clients . at clientId) serverState
      (WS.Text rawMsg) <- WS.receiveDataMessage conn
@@ -89,20 +88,19 @@ playerRead server clientId =
      case eitherDecode rawMsg :: Either String PlayerMessage of
        Left e ->
          do printf "ERR: %s\n" (show e)
-            WS.send conn
-                    (toMessage invalidMessageHelp)
+            WS.send conn (toMessage invalidMessageHelp)
        Right (PlayerMessage msg) ->
          do printf "Got command : %s\n" (show msg)
             atomically $
               modifyTVar server
                          (over scene (Engine.update (FromPlayer clientId msg)))
-            threadDelay (500 * 1000)
 
-playerLoop :: TVar Server -> ClientId -> IO ()
-playerLoop server clientId =
-  forever $
-  do playerRead server clientId
-     playerWrite server clientId
+sendBoardToPlayer :: TVar Server -> ClientId -> IO ()
+sendBoardToPlayer server clientId =
+  do serverState <- atomically $ readTVar server
+     case view (clients . at clientId) serverState of
+       Nothing -> return ()
+       Just conn -> WS.send conn (toMessage (view scene serverState))
 
 acceptPlayerConnection :: TVar Server -> WS.ServerApp
 acceptPlayerConnection server pendingConnection =
