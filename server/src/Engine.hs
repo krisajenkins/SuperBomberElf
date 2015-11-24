@@ -6,6 +6,7 @@ module Engine (update,blastRadius) where
 
 import           Control.Lens
 import           Data.Maybe
+import           Data.Monoid
 import qualified Data.Set     as Set
 import           Data.Time
 import           Safe         (atMay)
@@ -58,7 +59,7 @@ isExpired t bomb =
 blastPattern :: [(Int,Int)]
 blastPattern =
   zip [0 ..]
-      ([0,0,0] ++ [1 .. 4] ++ [5,4 .. 1])
+      ([0,0,0] <> [1 .. 4] <> [5,4 .. 1])
 
 blastRadius :: UTCTime -> UTCTime -> Maybe Int
 blastRadius currentTime droppedTime =

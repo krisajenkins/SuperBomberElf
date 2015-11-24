@@ -82,14 +82,14 @@ data ServerCommand
 initialScene :: UTCTime -> Scene
 initialScene _clock =
   let _walls =
-        (wallAt Strong <$> (,0) <$> [0 .. 10]) <>
-        (wallAt Strong <$> (,10) <$> [0 .. 10]) <>
-        (wallAt Strong <$> (0,) <$> [0 .. 10]) <>
-        (wallAt Strong <$> (10,) <$> [0 .. 10]) <>
-        (wallAt Weak <$> (3,) <$> [1 .. 9]) <>
-        (wallAt Weak <$> (7,) <$> [1 .. 9]) <>
-        (wallAt Weak <$> (,3) <$> [1 .. 9]) <>
-        (wallAt Weak <$> (,7) <$> [1 .. 9])
+        (wallAt Strong . (,0) <$> [0 .. 10]) <>
+        (wallAt Strong . (,10) <$> [0 .. 10]) <>
+        (wallAt Strong . (0,) <$> [0 .. 10]) <>
+        (wallAt Strong . (10,) <$> [0 .. 10]) <>
+        (wallAt Weak . (3,) <$> [1 .. 9]) <>
+        (wallAt Weak . (7,) <$> [1 .. 9]) <>
+        (wallAt Weak . (,3) <$> [1 .. 9]) <>
+        (wallAt Weak . (,7) <$> [1 .. 9])
       _players = Map.empty
       _bombs = []
   in Scene {..}
