@@ -9,15 +9,15 @@ import           Config
 import           Control.Concurrent
 import           Control.Concurrent.STM
 import           Control.Exception
-import           Control.Lens               hiding ((.=))
+import           Control.Lens           hiding ((.=))
 import           Control.Monad
 import           Data.Aeson
-import           Data.ByteString.Lazy.Char8 as C
-import           Data.Map                   (Map)
-import qualified Data.Map                   as Map
+
+import           Data.Map               (Map)
+import qualified Data.Map               as Map
 import           Data.Time
 import           Engine
-import qualified Network.WebSockets         as WS
+import qualified Network.WebSockets     as WS
 import           System.Random
 import           Text.Printf
 import           Types
@@ -43,7 +43,7 @@ playerJoins server conn =
               newClientId = ClientId uuid
               newPlayer =
                 Player {_playerName = Nothing
-                       ,_playerPosition = Position 1 5}
+                       ,_playerPosition = Position 1 1}
           modifyTVar
             server
             (over (scene . players)
@@ -51,6 +51,8 @@ playerJoins server conn =
              over clients (Map.insert newClientId conn) . set gen _gen')
           return newClientId
      printf "CONNECTED: %s\n" (show clientId)
+     s <- atomically (view scene <$> readTVar server)
+     sendSceneToConnection s conn
      return clientId
 
 playerLeaves :: TVar Server -> ClientId -> IO ()
@@ -74,33 +76,41 @@ invalidMessageHelp =
 
 playerLoop :: TVar Server -> ClientId  -> IO ()
 playerLoop server clientId =
-  forever $
-  do handleCommandFromPlayer server clientId
-     sendBoardToPlayer server clientId
-     threadDelay (100 * 1000)
+  forever $ handleCommandFromPlayer server clientId
 
 handleCommandFromPlayer :: TVar Server -> ClientId -> IO ()
 handleCommandFromPlayer server clientId =
   do serverState <- atomically $ readTVar server
      let (Just conn) = view (clients . at clientId) serverState
-     (WS.Text rawMsg) <- WS.receiveDataMessage conn
-     printf "Got RawMsg: '%s'\n" (C.unpack rawMsg)
+     dataMessage <- WS.receiveDataMessage conn
+     printf "Got RawMsg: '%s'\n" (show dataMessage)
+     handleMessage server clientId dataMessage
+
+handleMessage :: TVar Server -> ClientId -> WS.DataMessage -> IO ()
+handleMessage _ _ (WS.Text "") = pure ()
+handleMessage _ _ (WS.Binary _) = pure ()
+handleMessage server clientId (WS.Text rawMsg) =
+  do serverState <- atomically $ readTVar server
+     let (Just conn) = view (clients . at clientId) serverState
      case eitherDecode rawMsg :: Either String PlayerMessage of
        Left e ->
          do printf "ERR: %s\n" (show e)
             WS.send conn (toMessage invalidMessageHelp)
        Right (PlayerMessage msg) ->
-         do printf "Got command : %s\n" (show msg)
-            atomically $
+         do atomically $
               modifyTVar server
                          (over scene (Engine.update (FromPlayer clientId msg)))
+            sendSceneToPlayers server
+            threadDelay (100 * 1000)
 
-sendBoardToPlayer :: TVar Server -> ClientId -> IO ()
-sendBoardToPlayer server clientId =
+sendSceneToPlayers :: TVar Server -> IO ()
+sendSceneToPlayers server =
   do serverState <- atomically $ readTVar server
-     case view (clients . at clientId) serverState of
-       Nothing -> return ()
-       Just conn -> WS.send conn (toMessage (view scene serverState))
+     mapM_ (sendSceneToConnection (view scene serverState))
+           (Map.elems (view clients serverState))
+
+sendSceneToConnection :: Scene -> WS.Connection -> IO ()
+sendSceneToConnection s conn = WS.send conn (toMessage s)
 
 acceptPlayerConnection :: TVar Server -> WS.ServerApp
 acceptPlayerConnection server pendingConnection =
