@@ -42,9 +42,15 @@ data Wall =
 makeLenses ''Wall
 
 data Bomb =
-  Bomb {_bombPosition :: Position
-       ,_droppedAt    :: UTCTime}
+  Bomb {_bombPosition  :: Position
+       ,_bombDroppedAt :: UTCTime}
 makeLenses ''Bomb
+
+data DisplayBomb =
+  DisplayBomb {_displayBombPosition :: Position
+               ,_displayBombRadius  :: Int}
+  deriving (Show,Eq,Generic)
+makeLenses ''DisplayBomb
 
 data Player =
   Player {_playerName     :: Maybe Text
@@ -57,22 +63,6 @@ data Scene =
         ,_bombs   :: [Bomb]
         ,_clock   :: UTCTime}
 makeLenses ''Scene
-
-instance ToJSON Position where
-  toJSON Position{..} = object ["x" .= _x,"y" .= _y]
-
-instance ToJSON Wall where
-  toJSON Wall{..} = object ["position" .= _wallPosition,"type" .= _wallType]
-
-instance ToJSON Bomb where
-  toJSON Bomb{..} = object ["position" .= _bombPosition]
-
-instance ToJSON Player where
-  toJSON Player{..} = object ["name" .= _playerName,"position" .= _playerPosition]
-
-instance ToJSON Scene where
-  toJSON Scene{..} =
-    object ["players" .= Map.elems _players,"walls" .= _walls,"bombs" .= _bombs]
 
 data PlayerCommand
   = DropBomb
@@ -89,8 +79,6 @@ data ServerCommand
   = FromPlayer ClientId PlayerCommand
   | Tick UTCTime
 
-
-
 initialScene :: UTCTime -> Scene
 initialScene _clock =
   let _walls =
@@ -102,7 +90,7 @@ initialScene _clock =
         (wallAt Weak <$> (7,) <$> [1 .. 9]) <>
         (wallAt Weak <$> (,3) <$> [1 .. 9]) <>
         (wallAt Weak <$> (,7) <$> [1 .. 9])
-      _players = Map.emptu
+      _players = Map.empty
       _bombs = []
   in Scene {..}
   where wallAt wt (wx,wy) =

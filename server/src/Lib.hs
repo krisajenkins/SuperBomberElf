@@ -12,6 +12,7 @@ import           Control.Exception
 import           Control.Lens           hiding ((.=))
 import           Control.Monad
 import           Data.Aeson
+import qualified Data.Vector            as V
 
 import           Data.Map               (Map)
 import qualified Data.Map               as Map
@@ -31,6 +32,37 @@ makeLenses ''Server
 
 toMessage :: ToJSON a => a -> WS.Message
 toMessage = WS.DataMessage . WS.Text . encode
+
+------------------------------------------------------------
+
+displayPosition :: Position -> Value
+displayPosition Position{..} = object [("x",toJSON _x),("y",toJSON _y)]
+
+displayPlayer :: Player -> Value
+displayPlayer Player{..} =
+  object [("position", displayPosition _playerPosition)
+         ,("name", toJSON _playerName)]
+
+
+
+displayBomb :: UTCTime -> Bomb -> Value
+displayBomb currentTime Bomb{..} =
+  let radius = blastRadius currentTime _bombDroppedAt
+  in object [("position",displayPosition _bombPosition)
+            ,("blastRadius",toJSON radius)]
+
+displayWall :: Wall -> Value
+displayWall Wall{..} =
+  object [("position", displayPosition _wallPosition)
+         ,("type", toJSON _wallType)]
+
+displayScene :: Scene -> Value
+displayScene Scene{..} =
+  object [("players"
+          ,(Array $ V.fromList (displayPlayer <$> Map.elems _players)))
+         ,("walls",(Array $ V.fromList (displayWall <$> _walls)))
+         ,("time",toJSON _clock)
+         ,("bombs",(Array $ V.fromList (displayBomb _clock <$> _bombs)))]
 
 ------------------------------------------------------------
 
@@ -97,11 +129,14 @@ handleMessage server clientId (WS.Text rawMsg) =
          do printf "ERR: %s\n" (show e)
             WS.send conn (toMessage invalidMessageHelp)
        Right (PlayerMessage msg) ->
-         do atomically $
-              modifyTVar server
-                         (over scene (Engine.update (FromPlayer clientId msg)))
+         do atomically $ processMessage server (FromPlayer clientId msg)
             sendSceneToPlayers server
             threadDelay (100 * 1000)
+
+processMessage :: TVar Server -> ServerCommand -> STM ()
+processMessage server message =
+  modifyTVar server
+             (over scene (Engine.update message))
 
 sendSceneToPlayers :: TVar Server -> IO ()
 sendSceneToPlayers server =
@@ -110,7 +145,7 @@ sendSceneToPlayers server =
            (Map.elems (view clients serverState))
 
 sendSceneToConnection :: Scene -> WS.Connection -> IO ()
-sendSceneToConnection s conn = WS.send conn (toMessage s)
+sendSceneToConnection s conn = WS.send conn (WS.DataMessage . WS.Text . encode . displayScene $ s)
 
 acceptPlayerConnection :: TVar Server -> WS.ServerApp
 acceptPlayerConnection server pendingConnection =
@@ -131,9 +166,20 @@ runGameServer config =
      _scene <- initialScene <$> getCurrentTime
      let _clients = Map.empty
      server <- atomically $ newTVar Server {..}
+     _ <- forkIO $ gameLoop server
      runWebsocketServer (view playersBindTo config)
-                        (acceptPlayerConnection server)
+                          (acceptPlayerConnection server)
      printf "STOP\n"
+
+gameLoop :: TVar Server -> IO ()
+gameLoop server =
+  forever $
+  do _ <- threadDelay (200 * 1000)
+     t <- getCurrentTime
+     atomically $
+       processMessage server
+                      (Tick t)
+     sendSceneToPlayers server
 
 run :: IO ()
 run = runGameServer defaultConfig

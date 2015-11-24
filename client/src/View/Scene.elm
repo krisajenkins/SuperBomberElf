@@ -11,7 +11,7 @@ wallColor t =
     Weak -> "lightsalmon"
 
 blockSize : Int
-blockSize  = 30
+blockSize  = 50
 
 wallView : Wall -> Svg
 wallView wall =
@@ -23,17 +23,50 @@ wallView wall =
        ,stroke "white"]
        []
 
+playerColor : Player -> String
+playerColor _ = "blueviolet"
+
+bombView : Bomb -> Svg
+bombView bomb =
+  let x = (bomb.position.x * blockSize) + (blockSize // 2)
+      y = (bomb.position.y * blockSize) + (blockSize // 2)
+  in g []
+       [circle [cx (toString x)
+               ,cy (toString y)
+               ,r (toString (blockSize // 2))
+               ,fill "black"]
+               []
+       ,ellipse [cx (toString x)
+                ,cy (toString y)
+                ,rx (toString (bomb.blastRadius * blockSize // 2))
+                ,ry (toString (blockSize // 2))
+                ,fill "red"]
+                []
+       ,ellipse [cx (toString x)
+                ,cy (toString y)
+                ,rx (toString (blockSize // 2))
+                ,ry (toString (bomb.blastRadius * blockSize // 2))
+                ,fill "red"]
+                []]
+
 playerView : Player -> Svg
 playerView player =
-  circle [cx ((player.position.x * blockSize) + (blockSize // 2) |> toString)
-         ,cy ((player.position.y * blockSize) + (blockSize // 2) |> toString)
-         ,r (toString (blockSize // 2))]
-         []
+  let x = (player.position.x * blockSize) + (blockSize // 2)
+      y = (player.position.y * blockSize) + (blockSize // 2)
+  in circle [cx (toString x)
+            ,cy (toString y)
+            ,r (toString (round ((toFloat blockSize) * 0.3)))
+            ,stroke (playerColor player)
+            ,strokeWidth (toString (round ((toFloat blockSize) * 0.2)))
+            ,fill "transparent"]
+            []
 
 sceneView : Scene -> Svg
 sceneView scene =
   svg [width (toString (blockSize * 11))
       ,height (toString (blockSize * 11))]
       ((List.map wallView scene.walls)
+       ++
+       (List.map bombView scene.bombs)
        ++
        (List.map playerView scene.players))

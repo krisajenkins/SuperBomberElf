@@ -19,9 +19,14 @@ type alias Player =
   {name : Maybe String
   ,position : Position}
 
+type alias Bomb =
+  {position : Position
+  ,blastRadius : Int}
+
 type alias Scene =
   {walls : List Wall
-  ,players : List Player}
+  ,players : List Player
+  ,bombs : List Bomb}
 
 type alias Model =
   {scene : Maybe (Result String Scene)}
@@ -65,11 +70,18 @@ decodePlayer =
     ("name" := maybe string)
     ("position" := decodePosition)
 
+decodeBomb : Decoder Bomb
+decodeBomb =
+  object2 Bomb
+    ("position" := decodePosition)
+    ("blastRadius" := int)
+
 decodeScene : Decoder Scene
 decodeScene =
-  object2 Scene
+  object3 Scene
     ("walls" := list decodeWall)
     ("players" := list decodePlayer)
+    ("bombs" := list decodeBomb)
 
 encodePlayerCommand : PlayerCommand -> Value
 encodePlayerCommand command =
