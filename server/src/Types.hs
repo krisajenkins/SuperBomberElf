@@ -1,16 +1,19 @@
+{-# LANGUAGE DeriveAnyClass    #-}
+{-# LANGUAGE DeriveGeneric     #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes        #-}
 {-# LANGUAGE RecordWildCards   #-}
 {-# LANGUAGE TemplateHaskell   #-}
 module Types where
 
-import           Control.Lens (Lens', makeLenses)
+import           Control.Lens (makeLenses)
 import           Data.Aeson
 import           Data.Map     (Map)
 import qualified Data.Map     as Map
 import           Data.Text    as T
 import           Data.Time
 import           Data.UUID
+import           GHC.Generics
 
 newtype ClientId =
   ClientId UUID
@@ -63,15 +66,18 @@ instance ToJSON Scene where
     object ["players" .= (Map.elems _players),"walls" .= _walls,"bombs" .= _bombs]
 
 data PlayerCommand
-  = MoveUp
-  | MoveDown
-  | MoveLeft
-  | MoveRight
-  | DropBomb
-  deriving (Eq,Show)
+  = DropBomb
+  | North
+  | South
+  | East
+  | West
+  deriving (Eq,Bounded,Enum,Show,Generic,FromJSON,ToJSON)
 
-data ServerMessage
-  = PlayerMessage PlayerCommand (Lens' Scene Player)
+newtype PlayerMessage = PlayerMessage { message :: PlayerCommand}
+  deriving (Eq,Show,Generic,FromJSON,ToJSON)
+
+data ServerCommand
+  = FromPlayer ClientId PlayerCommand
   | Tick UTCTime
 
 initialScene :: UTCTime -> Scene

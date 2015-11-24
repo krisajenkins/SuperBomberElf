@@ -1,6 +1,7 @@
 module Types where
 
 import Json.Decode exposing (..)
+import Json.Encode as Encode
 
 type alias Position =
   {x : Int
@@ -17,7 +18,17 @@ type alias Model =
   {scene : Maybe (Result String Scene)}
 
 type Action
-  = NewScene (Result String Scene)
+  = MessageSent
+  | NewScene (Result String Scene)
+  | Message PlayerCommand
+
+type PlayerCommand
+  = NoCommand
+  | DropBomb
+  | North
+  | South
+  | East
+  | West
 
 decodePosition : Decoder Position
 decodePosition =
@@ -35,3 +46,7 @@ decodeScene : Decoder Scene
 decodeScene =
   object1 Scene
     ("players" := list decodePlayer)
+
+encodePlayerCommand : PlayerCommand -> Value
+encodePlayerCommand command =
+   Encode.string (toString command)

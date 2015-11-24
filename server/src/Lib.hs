@@ -1,25 +1,23 @@
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE OverloadedStrings   #-}
+{-# LANGUAGE RankNTypes          #-}
+{-# LANGUAGE RecordWildCards     #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TemplateHaskell     #-}
 module Lib (run) where
 
 import           Config
 import           Control.Concurrent
--- import           Control.Concurrent.Async
 import           Control.Concurrent.STM
--- import           Control.Concurrent.STM.TChan (TChan, readTChan)
 import           Control.Exception
-import           Control.Lens
+import           Control.Lens               hiding ((.=))
 import           Control.Monad
--- import           Control.Monad.IO.Class
--- import           Control.Monad.STM            (STM)
 import           Data.Aeson
-import           Data.Map               (Map)
-import qualified Data.Map               as Map
--- import           Data.Text              as T
+import           Data.ByteString.Lazy.Char8 as C
+import           Data.Map                   (Map)
+import qualified Data.Map                   as Map
 import           Data.Time
--- import           Data.UUID
--- import           Engine
-import qualified Network.WebSockets     as WS
+import           Engine
+import qualified Network.WebSockets         as WS
 import           System.Random
 import           Text.Printf
 import           Types
@@ -65,19 +63,52 @@ playerLeaves server clientId =
                 (Map.delete clientId)))
      printf "DISCONNECTED: %s\n" (show clientId)
 
-playerLoop :: TVar Server -> WS.Connection -> IO ()
-playerLoop server conn =
-  forever $
+playerWrite :: TVar Server -> ClientId -> IO ()
+playerWrite server clientId =
   do serverState <- atomically $ readTVar server
-     WS.send conn (toMessage (view scene serverState))
-     --msg <- WS.receiveDataMessage conn
-     threadDelay (500 * 1000)
+     case view (clients . at clientId) serverState of
+       Nothing -> return ()
+       Just conn -> do WS.send conn (toMessage (view scene serverState))
+                       threadDelay (500 * 1000)
+
+allMessages :: [PlayerMessage]
+allMessages = PlayerMessage <$> [minBound ..]
+
+invalidMessageHelp :: Value
+invalidMessageHelp =
+  (object ["validMessages" .= allMessages
+          ,"hint" .=
+           String "Messages must be valid JSON, and plain strings aren't allowed as top-level JSON elements, so everything must be wrapped in a message object. Blame Doug Crockford, not me!"])
+
+playerRead :: TVar Server -> ClientId  -> IO ()
+playerRead server clientId =
+  do serverState <- atomically $ readTVar server
+     let (Just conn) = view (clients . at clientId) serverState
+     (WS.Text rawMsg) <- WS.receiveDataMessage conn
+     printf "Got RawMsg: '%s'\n" (C.unpack rawMsg)
+     case eitherDecode rawMsg :: Either String PlayerMessage of
+       Left e ->
+         do printf "ERR: %s\n" (show e)
+            WS.send conn
+                    (toMessage invalidMessageHelp)
+       Right (PlayerMessage msg) ->
+         do printf "Got command : %s\n" (show msg)
+            atomically $
+              modifyTVar server
+                         (over scene (Engine.update (FromPlayer clientId msg)))
+            threadDelay (500 * 1000)
+
+playerLoop :: TVar Server -> ClientId -> IO ()
+playerLoop server clientId =
+  forever $
+  do playerRead server clientId
+     playerWrite server clientId
 
 acceptPlayerConnection :: TVar Server -> WS.ServerApp
 acceptPlayerConnection server pendingConnection =
   do conn <- WS.acceptRequest pendingConnection
      clientId <- playerJoins server conn
-     finally (playerLoop server conn)
+     finally (playerLoop server clientId)
              (playerLeaves server clientId)
 
 runWebsocketServer :: BindTo -> WS.ServerApp -> IO ()

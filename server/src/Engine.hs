@@ -1,27 +1,33 @@
 {-# LANGUAGE RankNTypes      #-}
 {-# LANGUAGE RecordWildCards #-}
-module Engine where
+module Engine (update) where
 
 import           Control.Lens
 import           Types
 
 inc, dec :: Int -> Int
-inc = (+) 1
-dec = (-) 1
+inc n = n + 1
+dec n = n - 1
 
-handlePlayerCommand :: PlayerCommand -> Lens' Scene Player -> Scene -> Scene
-handlePlayerCommand MoveUp player scene = over (player . playerPosition . y) dec scene
-handlePlayerCommand MoveDown player scene = over (player . playerPosition . y) inc scene
-handlePlayerCommand MoveLeft player scene = over (player . playerPosition . x) dec scene
-handlePlayerCommand MoveRight player scene = over (player . playerPosition . x) inc scene
-handlePlayerCommand DropBomb player scene =
-  let _bombPosition = view (player . playerPosition) scene
-      _droppedAt = view clock scene
-      newBomb = Bomb {..}
-  in over bombs (newBomb :) scene
+playerPositionAt :: ClientId -> Traversal' Scene Position
+playerPositionAt playerId = players . ix playerId . playerPosition
 
-update :: ServerMessage -> Scene -> Scene
-update (PlayerMessage command player) scene = handlePlayerCommand command player scene
+handlePlayerCommand :: ClientId -> PlayerCommand -> Scene -> Scene
+handlePlayerCommand playerId North scene = over (playerPositionAt playerId . y) dec scene
+handlePlayerCommand playerId South scene = over (playerPositionAt playerId . y) inc scene
+handlePlayerCommand playerId West  scene = over (playerPositionAt playerId . x) dec scene
+handlePlayerCommand playerId East  scene = over (playerPositionAt playerId . x) inc scene
+handlePlayerCommand playerId DropBomb scene =
+  case view (players . at playerId) scene of
+    Nothing -> scene
+    Just player ->
+      let _bombPosition = view playerPosition player
+          _droppedAt = view clock scene
+          newBomb = Bomb {..}
+      in over bombs (newBomb :) scene
+
+update :: ServerCommand -> Scene -> Scene
+update (FromPlayer clientId command) scene = handlePlayerCommand clientId command scene
 update (Tick t) scene =
   -- TODO Expire bombs.
   set clock t scene
