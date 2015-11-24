@@ -1,8 +1,10 @@
-{-# LANGUAGE RankNTypes      #-}
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE RankNTypes          #-}
+{-# LANGUAGE RecordWildCards     #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 module Engine (update) where
 
 import           Control.Lens
+import           Data.Set     as Set
 import           Types
 
 inc, dec :: Int -> Int
@@ -26,8 +28,20 @@ handlePlayerCommand playerId DropBomb scene =
           newBomb = Bomb {..}
       in over bombs (newBomb :) scene
 
+validScene :: Scene -> Bool
+validScene scene =
+  let playerPositions =
+        Set.fromList $ toListOf (players . each . playerPosition) scene
+      wallPositions =
+        Set.fromList $ toListOf (walls . each . wallPosition) scene
+  in Set.null (intersection playerPositions wallPositions)
+
 update :: ServerCommand -> Scene -> Scene
-update (FromPlayer clientId command) scene = handlePlayerCommand clientId command scene
+update (FromPlayer clientId command) scene =
+  let newScene = handlePlayerCommand clientId command scene
+  in if validScene newScene
+        then newScene
+        else scene
 update (Tick t) scene =
   -- TODO Expire bombs.
   set clock t scene

@@ -7,12 +7,21 @@ type alias Position =
   {x : Int
   ,y : Int}
 
+type WallType
+  = Weak
+  | Strong
+
+type alias Wall =
+  {wallType : WallType
+  ,position : Position}
+
 type alias Player =
   {name : Maybe String
   ,position : Position}
 
 type alias Scene =
-  {players : List Player}
+  {walls : List Wall
+  ,players : List Player}
 
 type alias Model =
   {scene : Maybe (Result String Scene)}
@@ -36,6 +45,20 @@ decodePosition =
     ("x" := int)
     ("y" := int)
 
+decodeWallType : Decoder WallType
+decodeWallType =
+  string `andThen`
+    (\s -> case s of
+             "Weak" -> succeed Weak
+             "Strong" -> succeed Strong
+             _ -> fail ("Unknown wall type: " ++ s))
+
+decodeWall : Decoder Wall
+decodeWall =
+  object2 Wall
+    ("type" := decodeWallType)
+    ("position" := decodePosition)
+
 decodePlayer : Decoder Player
 decodePlayer =
   object2 Player
@@ -44,7 +67,8 @@ decodePlayer =
 
 decodeScene : Decoder Scene
 decodeScene =
-  object1 Scene
+  object2 Scene
+    ("walls" := list decodeWall)
     ("players" := list decodePlayer)
 
 encodePlayerCommand : PlayerCommand -> Value

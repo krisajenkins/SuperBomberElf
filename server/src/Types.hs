@@ -4,12 +4,14 @@
 {-# LANGUAGE RankNTypes        #-}
 {-# LANGUAGE RecordWildCards   #-}
 {-# LANGUAGE TemplateHaskell   #-}
+{-# LANGUAGE TupleSections     #-}
 module Types where
 
 import           Control.Lens (makeLenses)
 import           Data.Aeson
 import           Data.Map     (Map)
 import qualified Data.Map     as Map
+import           Data.Monoid
 import           Data.Text    as T
 import           Data.Time
 import           Data.UUID
@@ -25,11 +27,18 @@ instance ToJSON ClientId where
 data Position =
   Position {_x :: Int
            ,_y :: Int}
-  deriving (Show,Eq)
+  deriving (Show,Eq,Ord)
 makeLenses ''Position
 
+data WallType
+  = Strong
+  | Weak
+  deriving (Show,Eq,Generic,ToJSON)
+makeLenses ''WallType
+
 data Wall =
-  Wall {_wallPosition :: Position}
+  Wall {_wallType     :: WallType
+       ,_wallPosition :: Position}
 makeLenses ''Wall
 
 data Bomb =
@@ -53,7 +62,7 @@ instance ToJSON Position where
   toJSON Position{..} = object ["x" .= _x,"y" .= _y]
 
 instance ToJSON Wall where
-  toJSON Wall{..} = object ["position" .= _wallPosition]
+  toJSON Wall{..} = object ["position" .= _wallPosition,"type" .= _wallType]
 
 instance ToJSON Bomb where
   toJSON Bomb{..} = object ["position" .= _bombPosition]
@@ -80,9 +89,22 @@ data ServerCommand
   = FromPlayer ClientId PlayerCommand
   | Tick UTCTime
 
+
+
 initialScene :: UTCTime -> Scene
 initialScene _clock =
-  let _players = Map.empty
-      _walls = []
+  let _walls =
+        (wallAt Strong <$> (,0) <$> [0 .. 10]) <>
+        (wallAt Strong <$> (,10) <$> [0 .. 10]) <>
+        (wallAt Strong <$> (0,) <$> [0 .. 10]) <>
+        (wallAt Strong <$> (10,) <$> [0 .. 10]) <>
+        (wallAt Weak <$> (3,) <$> [1 .. 9]) <>
+        (wallAt Weak <$> (7,) <$> [1 .. 9]) <>
+        (wallAt Weak <$> (,3) <$> [1 .. 9]) <>
+        (wallAt Weak <$> (,7) <$> [1 .. 9])
+      _players = Map.emptu
       _bombs = []
   in Scene {..}
+  where wallAt wt (wx,wy) =
+          Wall {_wallType = wt
+               ,_wallPosition = Position wx wy}
