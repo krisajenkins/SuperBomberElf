@@ -46,9 +46,9 @@ playerJoins server conn =
                        ,_playerPosition = Position 1 5}
           modifyTVar
             server
-            ((over (scene . players)
-                   (Map.insert newClientId newPlayer)) .
-             (over clients (Map.insert newClientId conn)) . (set gen _gen'))
+            (over (scene . players)
+                  (Map.insert newClientId newPlayer) .
+             over clients (Map.insert newClientId conn) . set gen _gen')
           return newClientId
      printf "CONNECTED: %s\n" (show clientId)
      return clientId
@@ -58,9 +58,9 @@ playerLeaves server clientId =
   do atomically $
        modifyTVar
          server
-         ((over clients (Map.delete clientId)) .
-          (over (scene . players)
-                (Map.delete clientId)))
+         (over clients (Map.delete clientId) .
+          over (scene . players)
+               (Map.delete clientId))
      printf "DISCONNECTED: %s\n" (show clientId)
 
 playerWrite :: TVar Server -> ClientId -> IO ()
@@ -76,9 +76,9 @@ allMessages = PlayerMessage <$> [minBound ..]
 
 invalidMessageHelp :: Value
 invalidMessageHelp =
-  (object ["validMessages" .= allMessages
-          ,"hint" .=
-           String "Messages must be valid JSON, and plain strings aren't allowed as top-level JSON elements, so everything must be wrapped in a message object. Blame Doug Crockford, not me!"])
+  object ["validMessages" .= allMessages
+         ,"hint" .=
+          String "Messages must be valid JSON, and plain strings aren't allowed as top-level JSON elements, so everything must be wrapped in a message object. Blame Doug Crockford, not me!"]
 
 playerRead :: TVar Server -> ClientId  -> IO ()
 playerRead server clientId =

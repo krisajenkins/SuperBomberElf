@@ -63,7 +63,7 @@ instance ToJSON Player where
 
 instance ToJSON Scene where
   toJSON Scene{..} =
-    object ["players" .= (Map.elems _players),"walls" .= _walls,"bombs" .= _bombs]
+    object ["players" .= Map.elems _players,"walls" .= _walls,"bombs" .= _bombs]
 
 data PlayerCommand
   = DropBomb
