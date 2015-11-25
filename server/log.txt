@@ -1,0 +1,9 @@
+2015-11-25T10:18:43 0 hoogle=
+2015-11-25T10:18:47 0 hoogle="Data.time"
+2015-11-25T10:18:54 0 hoogle="time +Data +hourglass"
+2015-11-25T10:18:57 0 hoogle="time +Data +hourglass"
+2015-11-25T10:19:00 0 hoogle=hourglass
+2015-11-25T10:23:21 0 hoogle=hourglass
+2015-11-25T10:23:33 0 hoogle="UTCTime -> UTCTime -> Float"
+2015-11-25T10:23:47 0 hoogle="UTCTime -> UTCTime -> Double"
+2015-11-25T11:03:07 0 hoogle="a -> Maybe a -> a"

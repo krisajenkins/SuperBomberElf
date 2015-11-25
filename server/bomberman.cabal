@@ -19,6 +19,7 @@ library
                      , Config
                      , Engine
                      , Types
+                     , Levels
   build-depends:       base >= 4.7 && < 5
                      , aeson
                      , async
@@ -74,7 +75,11 @@ test-suite bomberman-test
                      , uuid
                      , lens
                      , mtl
+                     , test-framework
+                     , test-framework-quickcheck2
+                     , QuickCheck
                      , network
+                     , stm
                      , stm
                      , text
                      , time

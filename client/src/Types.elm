@@ -13,15 +13,23 @@ type WallType
 
 type alias Wall =
   {wallType : WallType
-  ,position : Position}
+  ,position : Position
+  ,alive : Bool}
 
 type alias Player =
   {name : Maybe String
-  ,position : Position}
+  ,position : Position
+  ,alive : Bool}
+
+type alias Blast =
+  {north : Int
+  ,south : Int
+  ,west : Int
+  ,east : Int}
 
 type alias Bomb =
   {position : Position
-  ,blastRadius : Int}
+  ,blast : Maybe Blast}
 
 type alias Scene =
   {walls : List Wall
@@ -35,14 +43,17 @@ type Action
   = MessageSent
   | NewScene (Result String Scene)
   | Message PlayerCommand
+  | NoOp
+
+type Direction
+  = North
+  | South
+  | West
+  | East
 
 type PlayerCommand
-  = NoCommand
-  | DropBomb
-  | North
-  | South
-  | East
-  | West
+  = DropBomb
+  | Move Direction
 
 decodePosition : Decoder Position
 decodePosition =
@@ -60,21 +71,31 @@ decodeWallType =
 
 decodeWall : Decoder Wall
 decodeWall =
-  object2 Wall
+  object3 Wall
     ("type" := decodeWallType)
     ("position" := decodePosition)
+    ("alive" := bool)
 
 decodePlayer : Decoder Player
 decodePlayer =
-  object2 Player
+  object3 Player
     ("name" := maybe string)
     ("position" := decodePosition)
+    ("alive" := bool)
+
+decodeBlast : Decoder Blast
+decodeBlast =
+  object4 Blast
+    ("North" := int)
+    ("South" := int)
+    ("West" := int)
+    ("East" := int)
 
 decodeBomb : Decoder Bomb
 decodeBomb =
   object2 Bomb
     ("position" := decodePosition)
-    ("blastRadius" := int)
+    ("blast" := maybe decodeBlast)
 
 decodeScene : Decoder Scene
 decodeScene =
@@ -85,13 +106,20 @@ decodeScene =
 
 encodePlayerCommand : PlayerCommand -> Value
 encodePlayerCommand command =
-   Encode.string (toString command)
+  Encode.object
+    [("command" ,Encode.string (case command of
+                                  DropBomb -> "DropBomb"
+                                  Move d -> "Move" ++ toString d))]
 
-direction : { x : Int, y : Int } -> PlayerCommand
-direction d =
+directionFor : { x : Int, y : Int } -> Maybe Direction
+directionFor d =
   case (d.x,d.y) of
-    (-1,0) -> West
-    (1,0) -> East
-    (0,-1) -> South
-    (0,1) -> North
-    _ -> NoCommand
+    (-1,0) -> Just West
+    (1,0) -> Just East
+    (0,-1) -> Just South
+    (0,1) -> Just North
+    _ -> Nothing
+
+messageFor : { x : Int, y : Int } -> Maybe Action
+messageFor d =
+  Maybe.map (Message << Move) (directionFor d)

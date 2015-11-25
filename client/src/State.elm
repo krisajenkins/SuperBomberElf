@@ -14,6 +14,7 @@ update : Action -> Model -> Model
 update action model =
   case action of
     NewScene scene -> {model | scene = Just scene}
+    NoOp -> model
     Message _ -> model
     MessageSent -> model
 
@@ -21,8 +22,8 @@ effect : Action -> Model -> Effects Action
 effect action model =
   case action of
     NewScene _ -> none
-    Message NoCommand -> none
-    Message msg -> Encode.encode 0 (Encode.object [("message", (encodePlayerCommand msg))])
+    NoOp -> none
+    Message msg -> Encode.encode 0 (encodePlayerCommand msg)
                    |> Signal.send websocketMailbox.address
                    |> Effects.task
                    |> Effects.map (always MessageSent)

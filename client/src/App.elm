@@ -25,8 +25,8 @@ app = StartApp.start {init = State.init
                      ,inputs = [Signal.map (NewScene << Json.decodeString decodeScene)
                                            (WS.connect "ws://localhost:8080"
                                                        websocketMailbox.signal)
-                                                       ,Signal.map (Message << direction) Keyboard.arrows
-                                                       ,Signal.map (Message << direction) Keyboard.wasd
+                                                       ,Signal.filterMap messageFor NoOp Keyboard.arrows
+                                                       ,Signal.filterMap messageFor NoOp Keyboard.wasd
                                                        ,Signal.map (always (Message DropBomb)) Keyboard.space]}
 
 main : Signal Html

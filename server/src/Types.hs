@@ -1,10 +1,12 @@
-{-# LANGUAGE DeriveAnyClass    #-}
-{-# LANGUAGE DeriveGeneric     #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RankNTypes        #-}
-{-# LANGUAGE RecordWildCards   #-}
-{-# LANGUAGE TemplateHaskell   #-}
-{-# LANGUAGE TupleSections     #-}
+{-# LANGUAGE DeriveAnyClass      #-}
+{-# LANGUAGE DeriveGeneric       #-}
+{-# LANGUAGE OverloadedStrings   #-}
+{-# LANGUAGE RankNTypes          #-}
+{-# LANGUAGE RecordWildCards     #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE StandaloneDeriving  #-}
+{-# LANGUAGE TemplateHaskell     #-}
+{-# LANGUAGE ViewPatterns        #-}
 module Types where
 
 import           Control.Lens (makeLenses)
@@ -24,6 +26,13 @@ newtype ClientId =
 instance ToJSON ClientId where
   toJSON (ClientId uuid) = String . T.pack $ show uuid
 
+data Direction
+  = North
+  | South
+  | East
+  | West
+  deriving (Eq,Ord,Bounded,Enum,Show,Generic,FromJSON,ToJSON)
+
 data Position =
   Position {_x :: Int
            ,_y :: Int}
@@ -38,23 +47,27 @@ makeLenses ''WallType
 
 data Wall =
   Wall {_wallType     :: WallType
-       ,_wallPosition :: Position
-       ,_wallDiedAt   :: Maybe UTCTime}
+       ,_wallDiedAt   :: Maybe UTCTime
+       ,_wallPosition :: Position}
 makeLenses ''Wall
 
-data Bomb =
-  Bomb {_bombPosition  :: Position
-       ,_bombDroppedAt :: UTCTime}
-makeLenses ''Bomb
+newtype Blast =
+  Blast {unBlast :: Map Direction Int}
+  deriving (Show,Eq)
 
-data DisplayBomb =
-  DisplayBomb {_displayBombPosition :: Position
-               ,_displayBombRadius  :: Int}
-  deriving (Show,Eq,Generic)
-makeLenses ''DisplayBomb
+instance ToJSON Blast where
+  toJSON = toJSON . Map.mapKeys show . unBlast
+
+data Bomb =
+  Bomb {_bombPosition   :: Position
+       ,_bombExplodesAt :: UTCTime
+        ,_bombOwner     :: ClientId
+       ,_blast          :: Maybe Blast}
+makeLenses ''Bomb
 
 data Player =
   Player {_playerName     :: Maybe Text
+         ,_playerDiedAt   :: Maybe UTCTime
          ,_playerPosition :: Position}
 makeLenses ''Player
 
@@ -67,60 +80,23 @@ makeLenses ''Scene
 
 data PlayerCommand
   = DropBomb
-  | North
-  | South
-  | East
-  | West
-  deriving (Eq,Bounded,Enum,Show,Generic,FromJSON,ToJSON)
+  | Move Direction
+  deriving (Eq,Show,Generic)
 
-newtype PlayerMessage = PlayerMessage { message :: PlayerCommand}
-  deriving (Eq,Show,Generic,FromJSON,ToJSON)
+instance ToJSON PlayerCommand where
+  toJSON DropBomb = object [("command" , toJSON $ show DropBomb)]
+  toJSON (Move d) = object [("command" , toJSON $ "Move" <> show d)]
+
+instance FromJSON PlayerCommand where
+  parseJSON (Object o) = o .: "command"
+  parseJSON (String "DropBomb") = pure DropBomb
+  parseJSON (String (T.splitAt 4 -> ("Move", dir))) = Move <$> parseJSON (String dir)
+  parseJSON _ = fail "Invalid command."
+
+allPlayerCommands :: [PlayerCommand]
+allPlayerCommands = DropBomb : allMoves
+  where allMoves = Move <$> [minBound ..]
 
 data ServerCommand
   = FromPlayer ClientId PlayerCommand
   | Tick UTCTime
-
-
-wallAt :: WallType -> (Int, Int) -> Wall
-wallAt wt (wx,wy) =
-          Wall {_wallType = wt
-               ,_wallDiedAt = Nothing
-               ,_wallPosition = Position wx wy}
-
-
-outerWalls :: [Wall]
-outerWalls =
-  (wallAt Strong . (,0) <$> [0 .. 10]) <> (wallAt Strong . (,10) <$> [0 .. 10]) <>
-  (wallAt Strong . (0,) <$> [0 .. 10]) <>
-  (wallAt Strong . (10,) <$> [0 .. 10])
-
-poundLevel :: [Wall]
-poundLevel =
-  outerWalls <> (wallAt Weak . (3,) <$> [1 .. 9]) <>
-  (wallAt Weak . (7,) <$> [1 .. 9]) <>
-  (wallAt Weak . (,3) <$> [1 .. 9]) <>
-  (wallAt Weak . (,7) <$> [1 .. 9]) <>
-  (wallAt Weak <$> [(1,5),(5,1),(9,5),(5,9)]) <>
-  (wallAt Weak <$> [(2,2),(2,8),(8,2),(8,8)]) <>
-  (wallAt Strong <$> [(3,3),(7,3),(3,7),(7,7)]) <>
-  [wallAt Strong (5,5)]
-
-simpleLevel :: [Wall]
-simpleLevel =
-  outerWalls <>
-  (wallAt Strong <$>
-   do a <- [2,4,6,8]
-      b <- [2,4,6,8]
-      return (a,b)) <>
-  (wallAt Weak . (,1) <$> [3,7]) <>
-  (wallAt Weak . (,5) <$> [3,7]) <>
-  (wallAt Weak . (,9) <$> [3,7]) <>
-  (wallAt Weak . (,3) <$> [1,5,9]) <>
-  (wallAt Weak . (,7) <$> [1,5,9])
-
-initialScene :: UTCTime -> Scene
-initialScene _clock =
-  let _walls = simpleLevel -- poundLevel
-      _players = Map.empty
-      _bombs = []
-  in Scene {..}

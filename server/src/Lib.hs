@@ -14,10 +14,12 @@ import           Control.Monad
 import           Data.Aeson
 import           Data.Map               (Map)
 import qualified Data.Map               as Map
+import           Data.Maybe
 import qualified Data.Text              as T
 import           Data.Time
-import qualified Data.Vector            as V
+import           Data.UUID
 import           Engine
+import           Levels
 import qualified Network.WebSockets     as WS
 import           System.Random
 import           Text.Printf
@@ -40,34 +42,28 @@ displayPosition Position{..} = object [("x",toJSON _x),("y",toJSON _y)]
 
 displayPlayer :: Player -> Value
 displayPlayer Player{..} =
-  object [("position", displayPosition _playerPosition)
-         ,("name", toJSON _playerName)]
+  object [("position",displayPosition _playerPosition)
+         ,("name",toJSON _playerName)
+         ,("alive",toJSON (isNothing _playerDiedAt))]
 
-
-displayBomb :: UTCTime -> Bomb -> Value
-displayBomb currentTime Bomb{..} =
-  let radius = blastRadius currentTime _bombDroppedAt
-  in object [("position",displayPosition _bombPosition)
-            ,("blastRadius",toJSON radius)]
+displayBomb :: Bomb -> Value
+displayBomb bomb =
+  object [("position",displayPosition (view bombPosition bomb))
+         ,("blast", toJSON (view blast bomb))]
 
 displayWall :: Wall -> Value
 displayWall Wall{..} =
-  object [("position", displayPosition _wallPosition)
-         ,("type", toJSON _wallType)]
+  object [("position",displayPosition _wallPosition)
+         ,("alive",toJSON (isNothing _wallDiedAt))
+         ,("type",toJSON _wallType)]
 
 displayScene :: Scene -> Value
-displayScene Scene{..} =
-  object [("time",toJSON _clock)
-         ,("bombs"
-          ,(Array $
-            V.fromList
-              (displayBomb _clock <$> filter (not . bombExpired _clock) _bombs)))
-         ,("players"
-          ,(Array $ V.fromList (displayPlayer <$> Map.elems _players)))
-         ,("walls"
-          ,(Array $
-            V.fromList
-              (displayWall <$> filter (not . wallExpired _clock) _walls)))]
+displayScene s =
+  object [("bombs",toJSON (displayBomb <$> view bombs s))
+         ,("players",toJSON (displayPlayer <$> Map.elems (view players s)))
+         ,("walls",toJSON (displayWall <$> view walls s))]
+
+
 
 ------------------------------------------------------------
 
@@ -80,6 +76,7 @@ playerJoins server conn =
               newClientId = ClientId uuid
               newPlayer =
                 Player {_playerName = Just . T.pack $ show uuid
+                       ,_playerDiedAt = Nothing
                        ,_playerPosition = Position 1 1}
           modifyTVar
             server
@@ -103,13 +100,10 @@ playerLeaves server clientId =
                (Map.delete clientId))
      printf "DISCONNECTED: %s\n" (show clientId)
 
-allMessages :: [PlayerMessage]
-allMessages = PlayerMessage <$> [minBound ..]
-
 invalidMessageHelp :: Value
 invalidMessageHelp =
-  object ["validMessages" .= allMessages
-         ,"hint" .=
+  object ["validCommands" .= allPlayerCommands
+         , "hint" .=
           String "Messages must be valid JSON, and plain strings aren't allowed as top-level JSON elements, so everything must be wrapped in a message object. Blame Doug Crockford, not me!"]
 
 playerLoop :: TVar Server -> ClientId  -> IO ()
@@ -129,12 +123,12 @@ handleMessage _ _ (WS.Binary _) = pure ()
 handleMessage server clientId (WS.Text rawMsg) =
   do serverState <- atomically $ readTVar server
      let (Just conn) = view (clients . at clientId) serverState
-     case eitherDecode rawMsg :: Either String PlayerMessage of
+     case eitherDecode rawMsg :: Either String PlayerCommand of
        Left e ->
          do printf "ERR: %s\n" (show e)
             WS.send conn (toMessage invalidMessageHelp)
-       Right (PlayerMessage msg) ->
-         do atomically $ processMessage server (FromPlayer clientId msg)
+       Right cmd ->
+         do atomically $ processMessage server (FromPlayer clientId cmd)
             sendSceneToPlayers server
             threadDelay (100 * 1000)
 
@@ -179,7 +173,7 @@ runGameServer config =
 gameLoop :: TVar Server -> IO ()
 gameLoop server =
   forever $
-  do _ <- threadDelay (100 * 1000)
+  do _ <- threadDelay (200 * 1000)
      t <- getCurrentTime
      atomically $
        processMessage server
@@ -188,3 +182,23 @@ gameLoop server =
 
 run :: IO ()
 run = runGameServer defaultConfig
+
+aWall =
+  do t <- getCurrentTime
+     let _wallPosition = Position 4 5
+         _wallType = Strong
+         _wallDiedAt = Just $ addUTCTime (fromRational (-10.0)) t
+         -- _wallOwner = ClientId  uuid
+         -- _blast = Just $ Blast (Map.fromList [(East,3)])
+         wall = Wall {..}
+     print $ encode (displayWall wall)
+
+aBomb =
+  do t <- getCurrentTime
+     let _bombPosition = Position 4 5
+         _bombExplodesAt = t
+         Just uuid = Data.UUID.fromString "4ea7727c-11d3-44d7-9db8-7cfc88b93690"
+         _bombOwner = ClientId  uuid
+         _blast = Just $ Blast (Map.fromList [(East,3)])
+         bomb = Bomb {..}
+     print $ encode (displayBomb bomb)
