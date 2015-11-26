@@ -105,9 +105,9 @@ data PlayerCommand
   deriving (Eq,Show,Generic)
 
 instance ToJSON PlayerCommand where
-  toJSON DropBomb = object [("command" , toJSON $ show DropBomb)]
-  toJSON (SetName name) = object [("command" , toJSON $ ("SetName"::Text, name))]
-  toJSON (Move d) = object [("command" , toJSON $ "Move" <> show d)]
+  toJSON DropBomb = object [("command",toJSON $ show DropBomb)]
+  toJSON (SetName name) = object [("command",toJSON ("SetName" :: Text,name))]
+  toJSON (Move d) = object [("command",toJSON $ "Move" <> show d)]
 
 instance FromJSON PlayerCommand where
   parseJSON (Object o) = o .: "command"

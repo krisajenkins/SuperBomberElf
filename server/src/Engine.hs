@@ -16,6 +16,9 @@ import           Data.Set.Lens
 import           Data.Time
 import           Types
 
+dec :: Num a => a -> a
+dec n = n - 1
+
 ------------------------------------------------------------
 
 handlePlayerCommand :: ClientId -> PlayerCommand -> Scene -> Scene
@@ -33,14 +36,17 @@ handlePlayerCommand playerId DropBomb scene =
   case view (players . at playerId) scene of
     Nothing -> scene
     Just player ->
-      let _bombPosition = view playerPosition player
-          _blast = Nothing
-          _bombOwner = playerId
-          _bombExplodesAt =
-            addUTCTime (fromRational 3)
-                       (view clock scene)
-          newBomb = Bomb {..}
-      in over bombs (newBomb :) scene
+      if isDead now player
+         then scene
+         else let _bombPosition = view playerPosition player
+                  _blast = Nothing
+                  _bombOwner = playerId
+                  _bombExplodesAt =
+                    addUTCTime (fromRational 3)
+                               (view clock scene)
+                  newBomb = Bomb {..}
+              in over bombs (newBomb :) scene
+  where now = view clock scene
 
 canMove :: Scene -> Player -> Direction -> Bool
 canMove scene player direction =
@@ -76,9 +82,6 @@ allLiveWallPositions scene =
   setOf (walls . traverse . filtered (not . isDead now) . wallPosition) scene
   where now = view clock scene
 
-allWallPositions :: Scene -> Set Position
-allWallPositions = setOf (walls . traverse . wallPosition)
-
 allBlastPositions :: Scene -> Set Position
 allBlastPositions scene = foldl reducer Set.empty (view bombs scene)
   where reducer positions bomb = Set.union positions (blastSite bomb)
@@ -101,7 +104,7 @@ respawnPlayers scene =
 detonateBombs :: Scene -> Scene
 detonateBombs scene = over (bombs . traverse) detonateBomb scene
   where now = view clock scene
-        wallPositions = allWallPositions scene
+        wallPositions = allLiveWallPositions scene
         isDetonated bomb = isJust (view blast bomb)
         detonateBomb bomb =
           if |  isDetonated bomb -> bomb
@@ -152,5 +155,6 @@ killPlayers scene = over (players . traverse) maybeKill scene
         maybeKill player =
           if |  isDead now player -> player
              |  Set.member (view playerPosition player)
-                           blastPositions -> set playerDiedAt (Just now) player
+                           blastPositions ->
+               (over playerScore dec . set playerDiedAt (Just now)) player
              |  otherwise -> player

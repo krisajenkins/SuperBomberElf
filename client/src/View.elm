@@ -10,8 +10,15 @@ import View.Scene exposing (sceneView,playerView)
 
 root : Model -> Address Action -> Html
 root model address =
-  div []
-      [h1 []
+  div [style [("font-family", "Amarante, sans-serif")
+             ,("display", "flex")
+             ,("flex-direction", "column")
+             ,("align-items", "center")]]
+      [node "link" [href "//fonts.googleapis.com/css?family=Amarante&subset=latin"
+            ,rel "stylesheet"
+            ,type' "text/css"]
+            []
+      ,h1 [style [("font-size", "3rem")]]
           [Html.text "Super Bomber Elf"]
       ,case model.scene of
         Just (Ok scene) -> sceneLoadedView scene

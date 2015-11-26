@@ -26,9 +26,9 @@ import           Types
 import           Utils
 
 data Server =
-  Server {_clients :: Map ClientId WS.Connection
-         ,_scene   :: Scene
-         ,_gen     :: StdGen}
+  Server {_clients   :: Map ClientId WS.Connection
+         ,_scene     :: Scene
+         ,_generator :: StdGen}
 
 makeLenses ''Server
 
@@ -75,18 +75,24 @@ playerJoins server conn =
   do (clientId,newServerState) <-
        atomically $
        do serverState <- readTVar server
-          let (uuid,_gen') = random (view gen serverState)
+          let (uuid,g') = random (view generator serverState)
+              validStartPositions = do a <- [1,9]
+                                       b <- [1,9]
+                                       return (Position a b)
+              (n, g'') = randomR (0, length validStartPositions - 1) g'
+              startPosition = validStartPositions !! n
               newClientId = ClientId uuid
               newPlayer =
                 Player {_playerName = Just . T.pack $ show uuid
                        ,_playerDiedAt = Nothing
-                       ,_playerPosition = Position 1 1
+                       ,_playerPosition = startPosition
                        ,_playerScore = 0}
           modifyTVar
             server
-            (over (scene . players)
+            (set generator g'' .
+             over (scene . players)
                   (Map.insert newClientId newPlayer) .
-             over clients (Map.insert newClientId conn) . set gen _gen')
+             over clients (Map.insert newClientId conn))
           newServerState <- readTVar server
           return (newClientId,newServerState)
      printf "CONNECTED: %s\n" (show clientId)
@@ -168,7 +174,7 @@ runWebsocketServer bindTo =
 runGameServer :: Config -> IO ()
 runGameServer config =
   do printf "START\n"
-     _gen <- getStdGen
+     _generator <- getStdGen
      _scene <- initialScene <$> getCurrentTime
      let _clients = Map.empty
      server <- atomically $ newTVar Server {..}

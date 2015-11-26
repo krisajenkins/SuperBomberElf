@@ -45,7 +45,7 @@ simpleWalls =
 
 initialScene :: UTCTime -> Scene
 initialScene _clock =
-  let _walls = simpleWalls -- poundWalls
+  let _walls = poundWalls
       _players = Map.empty
       _bombs = []
   in Scene {..}

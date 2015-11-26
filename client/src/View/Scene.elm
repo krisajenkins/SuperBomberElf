@@ -4,6 +4,8 @@ import Types exposing (..)
 import Svg exposing (..)
 import String
 import Svg.Attributes exposing (..)
+import View.Bomb exposing (bombIcon)
+import View.Player exposing (playerIcon)
 
 wallColor : WallType -> String
 wallColor t =
@@ -35,13 +37,13 @@ playerColor player =
 
 bombView : Bomb -> Svg
 bombView bomb =
-  let x = (bomb.position.x * blockSize) + (blockSize // 2)
-      y = (bomb.position.y * blockSize) + (blockSize // 2)
+  let x = (bomb.position.x * blockSize)
+      y = (bomb.position.y * blockSize)
       blastLine toX toY =
-        line [x1 (toString x)
-             ,y1 (toString y)
-             ,x2 (toString toX)
-             ,y2 (toString toY)
+        line [x1 (toString (x + (blockSize // 2)))
+             ,y1 (toString (y + (blockSize // 2)))
+             ,x2 (toString (toX + (blockSize // 2)))
+             ,y2 (toString (toY + (blockSize // 2)))
              ,stroke "red"
              ,strokeWidth (toString (blockSize // 2))
              ,strokeLinecap "round"]
@@ -54,26 +56,26 @@ bombView bomb =
                        ,blastLine (x - (blast.west * blockSize)) y
                        ,blastLine (x + (blast.east * blockSize)) y])
        ++
-       [circle [cx (toString x)
-               ,cy (toString y)
-               ,r (toString (blockSize // 2))
-               ,fill "black"]
-               []])
+
+       [bombIcon (toString x)
+                 (toString y)
+                 (toString blockSize)
+                 (toString blockSize)])
 
 playerView : Player -> Svg
 playerView player =
-  let x = (player.position.x * blockSize) + (blockSize // 2)
-      y = (player.position.y * blockSize) + (blockSize // 2)
-  in circle [cx (toString x)
-            ,cy (toString y)
-            ,r (toString (round ((toFloat blockSize) * 0.3)))
-            ,stroke (playerColor player)
-            ,strokeWidth (toString (round ((toFloat blockSize) * 0.2)))
-            ,opacity (if player.alive
-                      then "1"
-                      else "0.5")
-            ,fill "transparent"]
-            []
+  let x = (player.position.x * blockSize)
+      y = (player.position.y * blockSize)
+      alpha = (if player.alive
+               then "1"
+               else "0.5")
+  in playerIcon player.alive
+                (playerColor player)
+                alpha
+                (toString x)
+                (toString y)
+                (toString blockSize)
+                (toString blockSize)
 
 sceneView : Scene -> Svg
 sceneView scene =
