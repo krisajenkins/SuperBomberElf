@@ -8,7 +8,7 @@ import Json.Encode as Encode
 init : (Model, Effects Action)
 init =
   ({scene = Nothing}
-  ,none)
+  ,sendMessage (SetName "WLHN"))
 
 update : Action -> Model -> Model
 update action model =
@@ -23,11 +23,15 @@ effect action model =
   case action of
     NewScene _ -> none
     NoOp -> none
-    Message msg -> Encode.encode 0 (encodePlayerCommand msg)
-                   |> Signal.send websocketMailbox.address
-                   |> Effects.task
-                   |> Effects.map (always MessageSent)
+    Message msg -> sendMessage msg
     MessageSent -> none
+
+sendMessage : PlayerCommand -> Effects Action
+sendMessage msg =
+  Encode.encode 0 (encodePlayerCommand msg)
+    |> Signal.send websocketMailbox.address
+    |> Effects.task
+    |> Effects.map (always MessageSent)
 
 websocketMailbox : Mailbox String
 websocketMailbox = Signal.mailbox ""

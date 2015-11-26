@@ -9,14 +9,17 @@
 {-# LANGUAGE ViewPatterns        #-}
 module Types where
 
-import           Control.Lens (makeLenses)
+import           Config
+import           Control.Lens (makeLenses, over, view)
 import           Data.Aeson
 import           Data.Map     (Map)
 import qualified Data.Map     as Map
+import           Data.Maybe
 import           Data.Monoid
 import           Data.Text    as T
 import           Data.Time
 import           Data.UUID
+import qualified Data.Vector  as V
 import           GHC.Generics
 
 newtype ClientId =
@@ -26,6 +29,18 @@ newtype ClientId =
 instance ToJSON ClientId where
   toJSON (ClientId uuid) = String . T.pack $ show uuid
 
+data Position =
+  Position {_x :: Int
+           ,_y :: Int}
+  deriving (Show,Eq,Ord)
+makeLenses ''Position
+
+instance Monoid Position where
+  mempty = Position 0 0
+  mappend (Position x1 y1) (Position x2 y2) =
+    Position (x1 + x2)
+             (y1 + y2)
+
 data Direction
   = North
   | South
@@ -33,11 +48,14 @@ data Direction
   | West
   deriving (Eq,Ord,Bounded,Enum,Show,Generic,FromJSON,ToJSON)
 
-data Position =
-  Position {_x :: Int
-           ,_y :: Int}
-  deriving (Show,Eq,Ord)
-makeLenses ''Position
+toPosition :: Direction -> Position
+toPosition North = Position 0 (-1)
+toPosition South = Position 0 1
+toPosition West = Position (-1) 0
+toPosition East = Position 1 0
+
+stepIn :: Direction -> Position -> Position
+stepIn = mappend . toPosition
 
 data WallType
   = Strong
@@ -61,14 +79,16 @@ instance ToJSON Blast where
 data Bomb =
   Bomb {_bombPosition   :: Position
        ,_bombExplodesAt :: UTCTime
-        ,_bombOwner     :: ClientId
+       ,_bombOwner      :: ClientId
        ,_blast          :: Maybe Blast}
 makeLenses ''Bomb
 
 data Player =
   Player {_playerName     :: Maybe Text
          ,_playerDiedAt   :: Maybe UTCTime
-         ,_playerPosition :: Position}
+         ,_playerPosition :: Position
+         ,_playerScore    :: Int}
+  deriving (Show)
 makeLenses ''Player
 
 data Scene =
@@ -80,23 +100,52 @@ makeLenses ''Scene
 
 data PlayerCommand
   = DropBomb
+  | SetName Text
   | Move Direction
   deriving (Eq,Show,Generic)
 
 instance ToJSON PlayerCommand where
   toJSON DropBomb = object [("command" , toJSON $ show DropBomb)]
+  toJSON (SetName name) = object [("command" , toJSON $ ("SetName"::Text, name))]
   toJSON (Move d) = object [("command" , toJSON $ "Move" <> show d)]
 
 instance FromJSON PlayerCommand where
   parseJSON (Object o) = o .: "command"
+  parseJSON (Array (V.toList -> [String "SetName",String s])) = pure $ SetName s
   parseJSON (String "DropBomb") = pure DropBomb
-  parseJSON (String (T.splitAt 4 -> ("Move", dir))) = Move <$> parseJSON (String dir)
+  parseJSON (String (T.splitAt 4 -> ("Move",dir))) =
+    Move <$> parseJSON (String dir)
   parseJSON _ = fail "Invalid command."
 
 allPlayerCommands :: [PlayerCommand]
-allPlayerCommands = DropBomb : allMoves
+allPlayerCommands = DropBomb : SetName "<name>" : allMoves
   where allMoves = Move <$> [minBound ..]
 
 data ServerCommand
   = FromPlayer ClientId PlayerCommand
   | Tick UTCTime
+
+respawn :: UTCTime -> NominalDiffTime -> Maybe UTCTime -> Maybe UTCTime
+respawn _ _  Nothing = Nothing
+respawn now respawnDelay (Just d) =
+  if addUTCTime respawnDelay d < now
+     then Nothing
+     else Just d
+
+------------------------------------------------------------
+
+class LivingThing a where
+  isDead :: UTCTime -> a -> Bool
+  maybeRespawn :: UTCTime -> a -> a
+
+instance LivingThing Bomb where
+  isDead now bomb = (\t -> now > addUTCTime blastDelay t) $ view bombExplodesAt bomb
+  maybeRespawn _ bomb = bomb
+
+instance LivingThing Wall where
+  isDead now wall = fromMaybe False $ (now >) <$> view wallDiedAt wall
+  maybeRespawn now = over wallDiedAt (respawn now wallRespawnDelay)
+
+instance LivingThing Player where
+  isDead now player = fromMaybe False $ (now >) <$> view playerDiedAt player
+  maybeRespawn now = over playerDiedAt (respawn now playerRespawnDelay)

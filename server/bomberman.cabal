@@ -20,6 +20,7 @@ library
                      , Engine
                      , Types
                      , Levels
+                     , Utils
   build-depends:       base >= 4.7 && < 5
                      , aeson
                      , async
@@ -78,6 +79,7 @@ test-suite bomberman-test
                      , mtl
                      , hspec
                      , QuickCheck
+                     , quickcheck-instances
                      , network
                      , stm
                      , stm

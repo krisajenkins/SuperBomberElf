@@ -23,16 +23,15 @@ wallView wall =
        ,fill (wallColor wall.wallType)
        ,opacity (if wall.alive
                  then "1"
-                 else "0.5")
+                 else "0.2")
        ,stroke "white"]
        []
 
 playerColor : Player -> String
 playerColor player =
-  player.name
-  |> Maybe.map (String.slice 0 6)
-  |> Maybe.map ((++) "#")
-  |> Maybe.withDefault "black"
+  player.id
+  |> (String.slice 0 6)
+  |> ((++) "#")
 
 bombView : Bomb -> Svg
 bombView bomb =
@@ -48,12 +47,12 @@ bombView bomb =
              ,strokeLinecap "round"]
              []
   in g []
-       (case bomb.blast of
+       ((case bomb.blast of
          Nothing -> []
          Just blast -> [blastLine x (y - (blast.north * blockSize))
                        ,blastLine x (y + (blast.south * blockSize))
                        ,blastLine (x - (blast.west * blockSize)) y
-                       ,blastLine (x + (blast.east * blockSize)) y]
+                       ,blastLine (x + (blast.east * blockSize)) y])
        ++
        [circle [cx (toString x)
                ,cy (toString y)

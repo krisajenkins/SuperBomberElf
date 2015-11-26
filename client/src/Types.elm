@@ -17,9 +17,11 @@ type alias Wall =
   ,alive : Bool}
 
 type alias Player =
-  {name : Maybe String
+  {id : String
+  ,name : Maybe String
   ,position : Position
-  ,alive : Bool}
+  ,alive : Bool
+  ,score : Int}
 
 type alias Blast =
   {north : Int
@@ -53,6 +55,7 @@ type Direction
 
 type PlayerCommand
   = DropBomb
+  | SetName String
   | Move Direction
 
 decodePosition : Decoder Position
@@ -78,10 +81,12 @@ decodeWall =
 
 decodePlayer : Decoder Player
 decodePlayer =
-  object3 Player
+  object5 Player
+    ("id" := string)
     ("name" := maybe string)
     ("position" := decodePosition)
     ("alive" := bool)
+    ("score" := int)
 
 decodeBlast : Decoder Blast
 decodeBlast =
@@ -107,9 +112,10 @@ decodeScene =
 encodePlayerCommand : PlayerCommand -> Value
 encodePlayerCommand command =
   Encode.object
-    [("command" ,Encode.string (case command of
-                                  DropBomb -> "DropBomb"
-                                  Move d -> "Move" ++ toString d))]
+    [("command", (case command of
+                    DropBomb -> Encode.string "DropBomb"
+                    SetName name -> Encode.list <| List.map Encode.string ["SetName",name]
+                    Move d -> Encode.string <| "Move" ++ toString d))]
 
 directionFor : { x : Int, y : Int } -> Maybe Direction
 directionFor d =

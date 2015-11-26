@@ -17,13 +17,13 @@ import qualified Data.Map               as Map
 import           Data.Maybe
 import qualified Data.Text              as T
 import           Data.Time
-import           Data.UUID
 import           Engine
 import           Levels
 import qualified Network.WebSockets     as WS
 import           System.Random
 import           Text.Printf
 import           Types
+import           Utils
 
 data Server =
   Server {_clients :: Map ClientId WS.Connection
@@ -40,11 +40,13 @@ toMessage = WS.DataMessage . WS.Text . encode
 displayPosition :: Position -> Value
 displayPosition Position{..} = object [("x",toJSON _x),("y",toJSON _y)]
 
-displayPlayer :: Player -> Value
-displayPlayer Player{..} =
-  object [("position",displayPosition _playerPosition)
+displayPlayer :: ClientId -> Player -> Value
+displayPlayer playerId Player{..} =
+  object [("id",toJSON playerId)
          ,("name",toJSON _playerName)
-         ,("alive",toJSON (isNothing _playerDiedAt))]
+         ,("position",displayPosition _playerPosition)
+         ,("alive",toJSON (isNothing _playerDiedAt))
+         ,("score",toJSON _playerScore)]
 
 displayBomb :: Bomb -> Value
 displayBomb bomb =
@@ -60,10 +62,11 @@ displayWall Wall{..} =
 displayScene :: Scene -> Value
 displayScene s =
   object [("bombs",toJSON (displayBomb <$> view bombs s))
-         ,("players",toJSON (displayPlayer <$> Map.elems (view players s)))
-         ,("walls",toJSON (displayWall <$> view walls s))]
-
-
+         ,("walls",toJSON (displayWall <$> view walls s))
+         ,("players"
+          ,toJSON (Map.foldWithKey (\k v b -> displayPlayer k v : b)
+                                   []
+                                   (view players s)))]
 
 ------------------------------------------------------------
 
@@ -77,7 +80,8 @@ playerJoins server conn =
               newPlayer =
                 Player {_playerName = Just . T.pack $ show uuid
                        ,_playerDiedAt = Nothing
-                       ,_playerPosition = Position 1 1}
+                       ,_playerPosition = Position 1 1
+                       ,_playerScore = 0}
           modifyTVar
             server
             (over (scene . players)
@@ -106,15 +110,11 @@ invalidMessageHelp =
          , "hint" .=
           String "Messages must be valid JSON, and plain strings aren't allowed as top-level JSON elements, so everything must be wrapped in a message object. Blame Doug Crockford, not me!"]
 
-playerLoop :: TVar Server -> ClientId  -> IO ()
-playerLoop server clientId = forever $ handleCommandFromPlayer server clientId
-
 handleCommandFromPlayer :: TVar Server -> ClientId -> IO ()
 handleCommandFromPlayer server clientId =
   do serverState <- atomically $ readTVar server
      let (Just conn) = view (clients . at clientId) serverState
      dataMessage <- WS.receiveDataMessage conn
-     printf "Got RawMsg: '%s'\n" (show dataMessage)
      handleMessage server clientId dataMessage
 
 handleMessage :: TVar Server -> ClientId -> WS.DataMessage -> IO ()
@@ -123,19 +123,26 @@ handleMessage _ _ (WS.Binary _) = pure ()
 handleMessage server clientId (WS.Text rawMsg) =
   do serverState <- atomically $ readTVar server
      let (Just conn) = view (clients . at clientId) serverState
-     case eitherDecode rawMsg :: Either String PlayerCommand of
+     case eitherDecode rawMsg of
        Left e ->
-         do printf "ERR: %s\n" (show e)
+         do printf "ERR %s: %s\n"
+                   (show clientId)
+                   (show e)
             WS.send conn (toMessage invalidMessageHelp)
        Right cmd ->
-         do atomically $ processMessage server (FromPlayer clientId cmd)
+         do atomically $
+              processMessage server
+                             (FromPlayer clientId cmd)
             sendSceneToPlayers server
-            threadDelay (100 * 1000)
+            threadPause playerThrottleDelay
 
 processMessage :: TVar Server -> ServerCommand -> STM ()
 processMessage server message =
   modifyTVar server
              (over scene (Engine.update message))
+
+playerLoop :: TVar Server -> ClientId  -> IO ()
+playerLoop server clientId = forever $ handleCommandFromPlayer server clientId
 
 sendSceneToPlayers :: TVar Server -> IO ()
 sendSceneToPlayers server =
@@ -173,7 +180,7 @@ runGameServer config =
 gameLoop :: TVar Server -> IO ()
 gameLoop server =
   forever $
-  do _ <- threadDelay (200 * 1000)
+  do _ <- threadPause frameDelay
      t <- getCurrentTime
      atomically $
        processMessage server
@@ -182,23 +189,3 @@ gameLoop server =
 
 run :: IO ()
 run = runGameServer defaultConfig
-
-aWall =
-  do t <- getCurrentTime
-     let _wallPosition = Position 4 5
-         _wallType = Strong
-         _wallDiedAt = Just $ addUTCTime (fromRational (-10.0)) t
-         -- _wallOwner = ClientId  uuid
-         -- _blast = Just $ Blast (Map.fromList [(East,3)])
-         wall = Wall {..}
-     print $ encode (displayWall wall)
-
-aBomb =
-  do t <- getCurrentTime
-     let _bombPosition = Position 4 5
-         _bombExplodesAt = t
-         Just uuid = Data.UUID.fromString "4ea7727c-11d3-44d7-9db8-7cfc88b93690"
-         _bombOwner = ClientId  uuid
-         _blast = Just $ Blast (Map.fromList [(East,3)])
-         bomb = Bomb {..}
-     print $ encode (displayBomb bomb)

@@ -7,26 +7,28 @@ module Engine (update) where
 
 import           Config
 import           Control.Lens
-import qualified Data.Map     as Map
+import qualified Data.Map      as Map
 import           Data.Maybe
 import           Data.Monoid
-import           Data.Set     (Set)
-import qualified Data.Set     as Set
+import           Data.Set      (Set)
+import qualified Data.Set      as Set
+import           Data.Set.Lens
 import           Data.Time
 import           Types
 
-inc, dec :: Int -> Int
-inc n = n + 1
-dec n = n - 1
+------------------------------------------------------------
 
 handlePlayerCommand :: ClientId -> PlayerCommand -> Scene -> Scene
 handlePlayerCommand playerId (Move direction) scene =
   over (players . ix playerId) moveIfYouCan scene
   where moveIfYouCan player =
-          if playerExpired (view clock scene)
-                           player
-             then player
-             else over playerPosition (stepIn direction) player
+          if canMove scene player direction
+             then over playerPosition (stepIn direction) player
+             else player
+
+handlePlayerCommand playerId (SetName s) scene =
+  set (players . ix playerId .playerName) (Just s) scene
+
 handlePlayerCommand playerId DropBomb scene =
   case view (players . at playerId) scene of
     Nothing -> scene
@@ -40,60 +42,61 @@ handlePlayerCommand playerId DropBomb scene =
           newBomb = Bomb {..}
       in over bombs (newBomb :) scene
 
-validScene :: Scene -> Bool
-validScene scene =
-  let playerPositions =
-        Set.fromList $ toListOf (players . each . playerPosition) scene
-      wallPositions =
-        Set.fromList $ toListOf (walls . each . wallPosition) scene
-  in Set.null (playerPositions `Set.intersection` wallPositions)
+canMove :: Scene -> Player -> Direction -> Bool
+canMove scene player direction =
+  let newPosition = stepIn direction (view playerPosition player)
+      now = view clock scene
+  in if |  isDead now player -> False
+        |  isLiveWallAt scene newPosition -> False
+        |  isBombAt scene newPosition -> False
+        |  otherwise -> True
+
+isLiveWallAt :: Scene -> Position -> Bool
+isLiveWallAt scene position =
+  Set.member position (allLiveWallPositions scene)
+
+isBombAt :: Scene -> Position -> Bool
+isBombAt scene position =
+  Set.member position (allBombPositions scene)
 
 update :: ServerCommand -> Scene -> Scene
-update (Tick t) scene =
-  (set clock t .
-   removeDeadWalls .
+update (Tick time) scene =
+  (set clock time .
    removeDeadBombs .
-   respawnDeadPlayers . detonateBombs . killWalls . killPlayers) scene
+   respawnWalls . respawnPlayers . detonateBombs . killWalls . killPlayers) scene
+
 update (FromPlayer clientId command) scene =
-  if validScene newScene
-     then newScene
-     else scene
-  where newScene = handlePlayerCommand clientId command scene
+   handlePlayerCommand clientId command scene
 
+allBombPositions :: Scene -> Set Position
+allBombPositions = setOf (bombs . traverse . bombPosition)
 
-stepIn :: Direction -> Position -> Position
-stepIn West = over x dec
-stepIn East = over x inc
-stepIn North = over y dec
-stepIn South = over y inc
-
-removeDeadWalls :: Scene -> Scene
-removeDeadWalls scene = over walls (filter isWallAlive) scene
+allLiveWallPositions :: Scene -> Set Position
+allLiveWallPositions scene =
+  setOf (walls . traverse . filtered (not . isDead now) . wallPosition) scene
   where now = view clock scene
-        isWallAlive wall =
-          case view wallDiedAt wall of
-            Nothing -> True
-            Just t -> t > now
-
-removeDeadBombs :: Scene -> Scene
-removeDeadBombs scene = over bombs (filter isBombAlive) scene
-  where now = view clock scene
-        isBombAlive bomb =
-          now <
-          addUTCTime (fuseTime + blastTime)
-                     (view bombExplodesAt bomb)
-
-respawnDeadPlayers :: Scene -> Scene
-respawnDeadPlayers scene = over (players . traverse . playerDiedAt) f scene
-  where t = view clock scene
-        f Nothing = Nothing
-        f (Just d) =
-          if addUTCTime respawnTime d < t
-             then Nothing
-             else Just d
 
 allWallPositions :: Scene -> Set Position
-allWallPositions scene = Set.fromList $ toListOf (walls . traverse . wallPosition) scene
+allWallPositions = setOf (walls . traverse . wallPosition)
+
+allBlastPositions :: Scene -> Set Position
+allBlastPositions scene = foldl reducer Set.empty (view bombs scene)
+  where reducer positions bomb = Set.union positions (blastSite bomb)
+
+respawnWalls :: Scene -> Scene
+respawnWalls scene =
+  over (walls . traverse)
+       (maybeRespawn time)
+       scene
+  where time = view clock scene
+
+respawnPlayers :: Scene -> Scene
+respawnPlayers scene =
+  over (players . traverse)
+       (maybeRespawn time)
+       scene
+  where time = view clock scene
+
 
 detonateBombs :: Scene -> Scene
 detonateBombs scene = over (bombs . traverse) detonateBomb scene
@@ -119,17 +122,17 @@ blastSite :: Bomb -> Set Position
 blastSite bomb =
   Set.fromList $
   Map.foldWithKey reducer
-                  [center]
+                  []
                   (fromMaybe Map.empty (unBlast <$> view blast bomb))
-  where center = view bombPosition bomb
-        reducer direction count p =
-          p <> take count (tail (iterate (stepIn direction) center))
+  where reducer direction count p =
+          p <>
+          take (count + 1)
+               (iterate (stepIn direction)
+                        (view bombPosition bomb))
 
-allBlastPositions :: Scene -> Set Position
-allBlastPositions scene = foldl reducer Set.empty (view bombs scene)
-  where reducer positions bomb =
-          Set.union positions (blastSite bomb)
-
+removeDeadBombs :: Scene -> Scene
+removeDeadBombs scene = over bombs (filter (not . isDead now)) scene
+  where now = view clock scene
 
 killWalls :: Scene -> Scene
 killWalls scene = over (walls . traverse) maybeKill scene
@@ -137,16 +140,17 @@ killWalls scene = over (walls . traverse) maybeKill scene
         blastPositions = allBlastPositions scene
         maybeKill wall =
           if |  view wallType wall == Strong -> wall
-             |  isJust (view wallDiedAt wall) -> wall
+             |  isDead now wall -> wall
              |  Set.member (view wallPosition wall)
                            blastPositions -> set wallDiedAt (Just now) wall
              |  otherwise -> wall
 
 killPlayers :: Scene -> Scene
-killPlayers scene = scene
-
-playerExpired :: UTCTime -> Player -> Bool
-playerExpired t player =
-  case view playerDiedAt player of
-    Nothing -> False
-    Just died -> died < t
+killPlayers scene = over (players . traverse) maybeKill scene
+  where now = view clock scene
+        blastPositions = allBlastPositions scene
+        maybeKill player =
+          if |  isDead now player -> player
+             |  Set.member (view playerPosition player)
+                           blastPositions -> set playerDiedAt (Just now) player
+             |  otherwise -> player
