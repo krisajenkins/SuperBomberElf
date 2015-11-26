@@ -1,9 +1,8 @@
 {-# LANGUAGE MultiWayIf          #-}
 {-# LANGUAGE RankNTypes          #-}
-{-# LANGUAGE RecordWildCards     #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections       #-}
-module Engine (update) where
+module Engine (handleGameEvent) where
 
 import           Config
 import           Control.Lens
@@ -38,13 +37,13 @@ handlePlayerCommand playerId DropBomb scene =
     Just player ->
       if isDead now player
          then scene
-         else let _bombPosition = view playerPosition player
-                  _blast = Nothing
-                  _bombOwner = playerId
-                  _bombExplodesAt =
-                    addUTCTime (fromRational 3)
-                               (view clock scene)
-                  newBomb = Bomb {..}
+         else let newBomb =
+                    Bomb {_bombPosition = view playerPosition player
+                         ,_blast = Nothing
+                         ,_bombOwner = playerId
+                         ,_bombExplodesAt =
+                            addUTCTime (fromRational 3)
+                                       (view clock scene)}
               in over bombs (newBomb :) scene
   where now = view clock scene
 
@@ -59,20 +58,19 @@ canMove scene player direction =
 
 isLiveWallAt :: Scene -> Position -> Bool
 isLiveWallAt scene position =
-  Set.member position (allLiveWallPositions scene)
+  Set.member position
+             (allLiveWallPositions scene)
 
 isBombAt :: Scene -> Position -> Bool
 isBombAt scene position =
   Set.member position (allBombPositions scene)
 
-update :: ServerCommand -> Scene -> Scene
-update (Tick time) scene =
-  (set clock time .
-   removeDeadBombs .
-   respawnWalls . respawnPlayers . detonateBombs . killWalls . killPlayers) scene
-
-update (FromPlayer clientId command) scene =
-   handlePlayerCommand clientId command scene
+handleGameEvent :: GameEvent -> Scene -> Scene
+handleGameEvent (FromPlayer clientId command) = handlePlayerCommand clientId command
+handleGameEvent (Tick time) =
+  set clock time .
+  removeDeadBombs .
+  respawnWalls . respawnPlayers . detonateBombs . killWalls . killPlayers
 
 allBombPositions :: Scene -> Set Position
 allBombPositions = setOf (bombs . traverse . bombPosition)
@@ -99,7 +97,6 @@ respawnPlayers scene =
        (maybeRespawn time)
        scene
   where time = view clock scene
-
 
 detonateBombs :: Scene -> Scene
 detonateBombs scene = over (bombs . traverse) detonateBomb scene

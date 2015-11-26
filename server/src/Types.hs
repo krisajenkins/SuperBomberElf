@@ -121,7 +121,7 @@ allPlayerCommands :: [PlayerCommand]
 allPlayerCommands = DropBomb : SetName "<name>" : allMoves
   where allMoves = Move <$> [minBound ..]
 
-data ServerCommand
+data GameEvent
   = FromPlayer ClientId PlayerCommand
   | Tick UTCTime
 

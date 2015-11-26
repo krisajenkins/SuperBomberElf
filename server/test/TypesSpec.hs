@@ -37,24 +37,22 @@ respawnSpec =
 bombSpec :: Spec
 bombSpec =
   describe "Player" $
-       do it "Players without a death time should always be alive" $
-            property $
-            \player time -> not $ isDead time player {_playerDiedAt = Nothing}
-          it "Players who die in the future should always be alive" $
-            property $
-            \player time (Positive seconds) ->
-              not $
-              isDead time
-                     player {_playerDiedAt = Just $ addUTCTime seconds time}
-          it "Players who die in the past should always be dead" $
-            property $
-            \player time (Positive seconds) ->
-              isDead (addUTCTime seconds time)
-                     player {_playerDiedAt = Just time}
+  do it "Players without a death time are alive" $
+       property $
+       \player time -> not $ isDead time player {_playerDiedAt = Nothing}
+     it "Players who die in the future are alive" $
+       property $
+       \player time (Positive seconds) ->
+         not $
+         isDead time player {_playerDiedAt = Just $ addUTCTime seconds time}
+     it "Players who die in the past are dead" $
+       property $
+       \player time (Positive seconds) ->
+         isDead (addUTCTime seconds time)
+                player {_playerDiedAt = Just time}
 
 playerCommandSpec :: Spec
 playerCommandSpec =
   describe "PlayerCommand" $
-       it "PlayerCommand <-> JSON is isomorphic" $
-       property $
-       \cmd -> eitherDecode (encode cmd) == Right (cmd :: PlayerCommand)
+  it "PlayerCommand <-> JSON is isomorphic" $
+  property $ \cmd -> eitherDecode (encode cmd) == Right (cmd :: PlayerCommand)

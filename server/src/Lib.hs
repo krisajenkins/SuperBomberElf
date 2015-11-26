@@ -137,15 +137,15 @@ handleMessage server clientId (WS.Text rawMsg) =
             WS.send conn (toMessage invalidMessageHelp)
        Right cmd ->
          do atomically $
-              processMessage server
+              processGameEvent server
                              (FromPlayer clientId cmd)
             sendSceneToPlayers server
             threadPause playerThrottleDelay
 
-processMessage :: TVar Server -> ServerCommand -> STM ()
-processMessage server message =
+processGameEvent :: TVar Server -> GameEvent -> STM ()
+processGameEvent server event =
   modifyTVar server
-             (over scene (Engine.update message))
+             (over scene (Engine.handleGameEvent event))
 
 playerLoop :: TVar Server -> ClientId  -> IO ()
 playerLoop server clientId = forever $ handleCommandFromPlayer server clientId
@@ -157,14 +157,14 @@ sendSceneToPlayers server =
            (Map.elems (view clients serverState))
 
 sendSceneToConnection :: Scene -> WS.Connection -> IO ()
-sendSceneToConnection s conn = WS.send conn (WS.DataMessage . WS.Text . encode . displayScene $ s)
+sendSceneToConnection =
+  flip WS.send . WS.DataMessage . WS.Text . encode . displayScene
 
 acceptPlayerConnection :: TVar Server -> WS.ServerApp
 acceptPlayerConnection server pendingConnection =
-  do conn <- WS.acceptRequest pendingConnection
-     clientId <- playerJoins server conn
-     finally (playerLoop server clientId)
-             (playerLeaves server clientId)
+  bracket (WS.acceptRequest pendingConnection >>= playerJoins server)
+          (playerLoop server)
+          (playerLeaves server)
 
 runWebsocketServer :: BindTo -> WS.ServerApp -> IO ()
 runWebsocketServer bindTo =
@@ -189,8 +189,8 @@ gameLoop server =
   do _ <- threadPause frameDelay
      t <- getCurrentTime
      atomically $
-       processMessage server
-                      (Tick t)
+       processGameEvent server
+                        (Tick t)
      sendSceneToPlayers server
 
 run :: IO ()
