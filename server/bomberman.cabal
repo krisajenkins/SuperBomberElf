@@ -65,6 +65,7 @@ test-suite bomberman-test
   type:                exitcode-stdio-1.0
   hs-source-dirs:      test
   main-is:             Spec.hs
+  other-modules:       TypesSpec
   build-depends:       base
                      , bomberman
                      , aeson
@@ -75,8 +76,7 @@ test-suite bomberman-test
                      , uuid
                      , lens
                      , mtl
-                     , test-framework
-                     , test-framework-quickcheck2
+                     , hspec
                      , QuickCheck
                      , network
                      , stm
