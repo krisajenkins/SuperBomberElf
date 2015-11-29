@@ -78,6 +78,7 @@ test-suite bomberman-test
                      , lens
                      , mtl
                      , hspec
+                     , hspec-core
                      , QuickCheck
                      , quickcheck-instances
                      , network

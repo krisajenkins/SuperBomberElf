@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 module TypesSpec (spec) where
 
 import           Data.Aeson
@@ -39,17 +40,17 @@ bombSpec =
   describe "Player" $
   do it "Players without a death time are alive" $
        property $
-       \player time -> not $ isDead time player {_playerDiedAt = Nothing}
+       \player time -> not $ isDead time (player {_playerDiedAt = Nothing})
      it "Players who die in the future are alive" $
        property $
        \player time (Positive seconds) ->
          not $
-         isDead time player {_playerDiedAt = Just $ addUTCTime seconds time}
+         isDead time player {_playerDiedAt = Just (addUTCTime seconds time)}
      it "Players who die in the past are dead" $
        property $
        \player time (Positive seconds) ->
          isDead (addUTCTime seconds time)
-                player {_playerDiedAt = Just time}
+                (player {_playerDiedAt = Just time})
 
 playerCommandSpec :: Spec
 playerCommandSpec =

@@ -6,11 +6,11 @@ module Engine (handleGameEvent) where
 
 import           Config
 import           Control.Lens
-import qualified Data.Map      as Map
+import           Control.Monad.Writer
+import qualified Data.Map             as Map
 import           Data.Maybe
-import           Data.Monoid
-import           Data.Set      (Set)
-import qualified Data.Set      as Set
+import           Data.Set             (Set)
+import qualified Data.Set             as Set
 import           Data.Set.Lens
 import           Data.Time
 import           Types
