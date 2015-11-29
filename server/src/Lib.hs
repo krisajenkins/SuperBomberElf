@@ -163,8 +163,8 @@ sendSceneToConnection =
 acceptPlayerConnection :: TVar Server -> WS.ServerApp
 acceptPlayerConnection server pendingConnection =
   bracket (WS.acceptRequest pendingConnection >>= playerJoins server)
-          (playerLoop server)
           (playerLeaves server)
+          (playerLoop server)
 
 runWebsocketServer :: BindTo -> WS.ServerApp -> IO ()
 runWebsocketServer bindTo =
