@@ -1,7 +1,7 @@
 module View.Bomb where
 
 import Svg exposing (svg,g,path,circle,Attribute,Svg)
-import Svg.Attributes exposing (d,x,y,cx,cy,r,preserveAspectRatio,width,height,viewBox,fill,fillRule,stroke,strokeWidth,style)
+import Svg.Attributes exposing (d,x,y,cx,cy,r,preserveAspectRatio,width,height,viewBox,fill,fillRule,stroke,strokeWidth,style,opacity)
 
 cls124 : String
 cls124 = """
