@@ -33,12 +33,12 @@ playerIcon : Bool -> String -> String -> String -> String -> String -> String ->
 playerIcon alive color alpha x1 y1 w h =
   let cls2 = "fill: " ++ color ++ ";" ++ cls234
   in svg [preserveAspectRatio "xMidYMid"
-      ,width w
-      ,x x1
-      ,y y1
-      ,opacity alpha
-      ,height h
-      ,viewBox "0 0 112.625 102.375"]
+         ,width w
+         ,x x1
+         ,y y1
+         ,opacity alpha
+         ,height h
+         ,viewBox "0 0 112.625 102.375"]
       [g []
          ([circle [cx "15" ,cy "15" ,r "13.5" ,style cls1] []
           ,path [d "M26.500,18.500 L73.500,18.500 C84.546,18.500 93.500,27.454 93.500,38.500 L93.500,75.500 C93.500,81.023 89.023,85.500 83.500,85.500 L16.500,85.500 C10.977,85.500 6.500,81.023 6.500,75.500 L6.500,38.500 C6.500,27.454 15.454,18.500 26.500,18.500 Z" ,style cls2] []
