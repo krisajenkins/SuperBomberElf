@@ -1,4 +1,8 @@
 TAGS
 /server/.stack-work
+/client/.shake
 /client/elm-stuff
 /client/dist
+/client/smake
+*.o
+*.hi
