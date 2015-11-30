@@ -20,6 +20,7 @@ library
                      , Engine
                      , Types
                      , Levels
+                     , Rest
                      , Utils
   build-depends:       base >= 4.7 && < 5
                      , aeson
@@ -34,6 +35,10 @@ library
                      , safe
                      , stm
                      , text
+                     , servant-server
+                     , wai
+                     , wai-websockets
+                     , warp
                      , time
                      , transformers
                      , vector

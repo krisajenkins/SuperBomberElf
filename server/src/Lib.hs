@@ -9,17 +9,21 @@ import           Config
 import           Control.Concurrent
 import           Control.Concurrent.STM
 import           Control.Exception
-import           Control.Lens           hiding ((.=))
+import           Control.Lens                   hiding ((.=))
 import           Control.Monad
 import           Data.Aeson
-import           Data.Map               (Map)
-import qualified Data.Map               as Map
+import           Data.Map                       (Map)
+import qualified Data.Map                       as Map
 import           Data.Maybe
-import qualified Data.Text              as T
+import qualified Data.Text                      as T
 import           Data.Time
 import           Engine
 import           Levels
-import qualified Network.WebSockets     as WS
+import qualified Network.Wai.Handler.Warp       as Warp
+import           Network.Wai.Handler.WebSockets
+import           Network.WebSockets
+import qualified Network.WebSockets             as WS
+import qualified Rest
 import           System.Random
 import           Text.Printf
 import           Types
@@ -172,11 +176,6 @@ sendSceneToConnection =
 
 ------------------------------------------------------------
 
-runWebsocketServer :: BindTo -> WS.ServerApp -> IO ()
-runWebsocketServer bindTo =
-  WS.runServer (view address bindTo)
-               (view port bindTo)
-
 initServer :: IO (TVar Server)
 initServer =
   do _generator <- getStdGen
@@ -184,14 +183,20 @@ initServer =
      _clients <- pure Map.empty
      atomically $ newTVar Server {..}
 
+------------------------------------------------------------
+
 runGameServer :: Config -> IO ()
 runGameServer config =
-  do printf "START\n"
+  do printf "Starting game loop thread.\n"
      server <- initServer
      _ <- forkIO $ gameLoop server
-     runWebsocketServer (view playersBindTo config)
-                        (acceptPlayerConnection server)
-     printf "STOP\n"
+     let p = view (playersBindTo . port) config
+     printf "Starting webserver on: %d\n" p
+     Warp.run p
+              (websocketsOr defaultConnectionOptions
+                            (acceptPlayerConnection server)
+                            Rest.application)
+     printf "Finished.\n"
 
 gameLoop :: TVar Server -> IO ()
 gameLoop server =
