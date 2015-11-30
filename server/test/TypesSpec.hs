@@ -2,6 +2,7 @@
 module TypesSpec (spec) where
 
 import           Data.Aeson
+import qualified Data.Map                  as Map
 import           Data.Maybe
 import           Data.Time
 import           Test.Hspec
@@ -18,6 +19,14 @@ instance Arbitrary Player where
 instance Arbitrary PlayerCommand where
   arbitrary = do name <- arbitrary
                  elements (allPlayerCommands name)
+
+instance Arbitrary Scene where
+  arbitrary =
+    do t <- arbitrary
+       return Scene {_players = Map.empty
+                    ,_walls = []
+                    ,_bombs = []
+                    ,_clock = t}
 
 spec :: Spec
 spec = do playerCommandSpec

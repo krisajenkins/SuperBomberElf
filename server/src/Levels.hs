@@ -43,6 +43,12 @@ simpleWalls =
   (wallAt Weak . (,3) <$> [1,5,9]) <>
   (wallAt Weak . (,7) <$> [1,5,9])
 
+validStartPositions :: [Position]
+validStartPositions =
+  do a <- [1,9]
+     b <- [1,9]
+     return (Position a b)
+
 initialScene :: UTCTime -> Scene
 initialScene _clock =
   let _walls = poundWalls

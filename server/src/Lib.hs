@@ -3,7 +3,7 @@
 {-# LANGUAGE RecordWildCards     #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell     #-}
-module Lib (run) where
+module Lib (run,genUUID,createPlayer,Server(..),generator) where
 
 import           Config
 import           Control.Concurrent
@@ -11,12 +11,14 @@ import           Control.Concurrent.STM
 import           Control.Exception
 import           Control.Lens                   hiding ((.=))
 import           Control.Monad
+import           Control.Monad.State
 import           Data.Aeson
 import           Data.Map                       (Map)
 import qualified Data.Map                       as Map
 import           Data.Maybe
 import qualified Data.Text                      as T
 import           Data.Time
+import           Data.UUID
 import           Engine
 import           Levels
 import qualified Network.Wai.Handler.Warp       as Warp
@@ -76,44 +78,63 @@ acceptPlayerConnection server pendingConnection =
           (playerLeaves server)
           (playerLoop server)
 
+
+readRandom :: (Random a,Monad m) => StateT Server m a
+readRandom =
+  do (r,g') <- random <$> use generator
+     assign generator g'
+     return r
+
+readRandomR :: (Random a,Monad m) => (a,a) -> StateT Server m a
+readRandomR range =
+  do (r,g') <- randomR range <$> use generator
+     assign generator g'
+     return r
+
+genUUID :: State Server UUID
+genUUID = readRandom
+
+genStartPosition :: State Server Position
+genStartPosition =
+  do n <- readRandomR (0,length validStartPositions - 1)
+     return $ validStartPositions !! n
+
+createPlayer :: State Server (ClientId,Player)
+createPlayer =
+  do uuid <- genUUID
+     startPosition <- genStartPosition
+     return $
+       (,) (ClientId uuid)
+           Player {_playerName = T.pack $ show uuid
+                  ,_playerDiedAt = Nothing
+                  ,_playerPosition = startPosition
+                  ,_playerScore = 0}
+
+addPlayerToServer :: Connection -> State Server ClientId
+addPlayerToServer conn =
+  do (newClientId,newPlayer) <- createPlayer
+     assign (scene . players . at newClientId) (Just newPlayer)
+     assign (clients . at newClientId) (Just conn)
+     return newClientId
+
+removePlayerFromServer :: ClientId -> State Server ()
+removePlayerFromServer clientId =
+  do assign (scene . players . at clientId) Nothing
+     assign (clients . at clientId) Nothing
+
 playerJoins :: TVar Server -> WS.Connection -> IO ClientId
 playerJoins server conn =
   do (clientId,newServerState) <-
-       atomically $
-       do serverState <- readTVar server
-          let (uuid,g') = random (view generator serverState)
-              validStartPositions = do a <- [1,9]
-                                       b <- [1,9]
-                                       return (Position a b)
-              (n, g'') = randomR (0, length validStartPositions - 1) g'
-              startPosition = validStartPositions !! n
-              newClientId = ClientId uuid
-              newPlayer =
-                Player {_playerName = T.pack $ show uuid
-                       ,_playerDiedAt = Nothing
-                       ,_playerPosition = startPosition
-                       ,_playerScore = 0}
-          modifyTVar
-            server
-            (set generator g'' .
-             over (scene . players)
-                  (Map.insert newClientId newPlayer) .
-             over clients (Map.insert newClientId conn))
-          newServerState <- readTVar server
-          return (newClientId,newServerState)
-     printf "CONNECTED: %s\n" (show clientId)
+       atomically . runStateSTM server $ addPlayerToServer conn
+     printf "JOINED: %s\n" (show clientId)
      sendSceneToConnection (view scene newServerState)
                            conn
      return clientId
 
 playerLeaves :: TVar Server -> ClientId -> IO ()
 playerLeaves server clientId =
-  do atomically $
-       modifyTVar
-         server
-         (over clients (Map.delete clientId) .
-          over (scene . players)
-               (Map.delete clientId))
+  do atomically . modifyTVar server . execState $
+       removePlayerFromServer clientId
      printf "DISCONNECTED: %s\n" (show clientId)
 
 playerLoop :: TVar Server -> ClientId  -> IO ()
@@ -122,7 +143,7 @@ playerLoop server clientId = forever $ handleCommandFromPlayer server clientId
 handleCommandFromPlayer :: TVar Server -> ClientId -> IO ()
 handleCommandFromPlayer server clientId =
   do serverState <- atomically $ readTVar server
-     let (Just conn) = view (clients . at clientId) serverState
+     (Just conn) <- pure $ view (clients . at clientId) serverState
      dataMessage <- WS.receiveDataMessage conn
      handleMessage server clientId dataMessage
 
@@ -131,7 +152,7 @@ handleMessage _ _ (WS.Text "") = pure ()
 handleMessage _ _ (WS.Binary _) = pure ()
 handleMessage server clientId (WS.Text rawMsg) =
   do serverState <- atomically $ readTVar server
-     let mConnection = view (clients . at clientId) serverState
+     mConnection <- pure $ view (clients . at clientId) serverState
      case mConnection of
        Nothing ->
          printf "SERVER ERROR - CONNECTION NOT FOUND: %s\n" (show clientId)
