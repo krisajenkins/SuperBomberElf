@@ -49,10 +49,10 @@ data Direction
   deriving (Eq,Ord,Bounded,Enum,Show,Generic,FromJSON,ToJSON)
 
 toPosition :: Direction -> Position
-toPosition North = Position 0 (-1)
-toPosition South = Position 0 1
-toPosition West = Position (-1) 0
-toPosition East = Position 1 0
+toPosition North = Position {_x = 0, _y = -1}
+toPosition South = Position {_x = 0, _y = 1}
+toPosition West = Position {_x = -1, _y = 0}
+toPosition East = Position {_x = 1, _y = 0}
 
 stepIn :: Direction -> Position -> Position
 stepIn = mappend . toPosition
@@ -84,7 +84,7 @@ data Bomb =
 makeLenses ''Bomb
 
 data Player =
-  Player {_playerName     :: Maybe Text
+  Player {_playerName     :: Text
          ,_playerDiedAt   :: Maybe UTCTime
          ,_playerPosition :: Position
          ,_playerScore    :: Int}
@@ -104,6 +104,9 @@ data PlayerCommand
   | Move Direction
   deriving (Eq,Show,Generic)
 
+allPlayerCommands :: Text -> [PlayerCommand]
+allPlayerCommands name = DropBomb : SetName name : (Move <$> [minBound ..])
+
 instance ToJSON PlayerCommand where
   toJSON DropBomb = object [("command",toJSON $ show DropBomb)]
   toJSON (SetName name) = object [("command",toJSON ("SetName" :: Text,name))]
@@ -116,10 +119,6 @@ instance FromJSON PlayerCommand where
   parseJSON (String (T.splitAt 4 -> ("Move",dir))) =
     Move <$> parseJSON (String dir)
   parseJSON _ = fail "Invalid command."
-
-allPlayerCommands :: [PlayerCommand]
-allPlayerCommands = DropBomb : SetName "<name>" : allMoves
-  where allMoves = Move <$> [minBound ..]
 
 data GameEvent
   = FromPlayer ClientId PlayerCommand

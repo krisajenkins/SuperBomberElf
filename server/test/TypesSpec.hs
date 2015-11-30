@@ -16,16 +16,18 @@ instance Arbitrary Player where
   arbitrary = Player <$> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary
 
 instance Arbitrary PlayerCommand where
-  arbitrary = elements allPlayerCommands
+  arbitrary = do name <- arbitrary
+                 elements (allPlayerCommands name)
 
 spec :: Spec
 spec = do playerCommandSpec
           bombSpec
+          positionSpec
           respawnSpec
 
 respawnSpec :: Spec
 respawnSpec =
-  describe "Respawn" $
+  describe "Respawn Rules" $
   do it "Living things don't change." $
        property $ \now delay -> isNothing $ respawn now delay Nothing
      it "Dead things will respawn." $
@@ -57,3 +59,14 @@ playerCommandSpec =
   describe "PlayerCommand" $
   it "PlayerCommand <-> JSON is isomorphic" $
   property $ \cmd -> eitherDecode (encode cmd) == Right (cmd :: PlayerCommand)
+
+positionSpec :: Spec
+positionSpec =
+  describe "Positions" $
+  it "A move plus its opposite equals no move." $
+  property $
+  \x1 y1 ->
+    mappend (Position x1 y1)
+            (Position (-x1)
+                      (-y1)) ==
+    mempty
