@@ -1,7 +1,8 @@
 module View.Player where
 
 import Svg exposing (svg,g,path,circle,Attribute,Svg)
-import Svg.Attributes exposing (d,x,y,cx,cy,r,preserveAspectRatio,width,height,viewBox,fill,fillRule,stroke,strokeWidth,style,opacity)
+import View.Utils exposing (classList)
+import Svg.Attributes exposing (d,x,y,cx,cy,r,preserveAspectRatio,width,height,viewBox,fill,fillRule,stroke,strokeWidth,style,class)
 
 cls124 : String
 cls124 = """
@@ -29,14 +30,15 @@ cls4 = """
         fill: #272525;
       """ ++ cls234
 
-playerIcon : Bool -> String -> String -> String -> String -> String -> String -> Svg
-playerIcon alive color alpha x1 y1 w h =
+playerIcon : Bool -> String -> String -> String -> String -> String -> Svg
+playerIcon alive color x1 y1 w h =
   let cls2 = "fill: " ++ color ++ ";" ++ cls234
   in svg [preserveAspectRatio "xMidYMid"
          ,width w
          ,x x1
          ,y y1
-         ,opacity alpha
+         ,classList [("player", True)
+                    ,("alive", alive)]
          ,height h
          ,viewBox "0 0 112.625 102.375"]
       [g []

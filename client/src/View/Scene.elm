@@ -3,6 +3,7 @@ module View.Scene where
 import Types exposing (..)
 import Svg exposing (..)
 import String
+import View.Utils exposing (classList)
 import Svg.Attributes exposing (..)
 import View.Bomb exposing (bombIcon)
 import View.Player exposing (playerIcon)
@@ -23,9 +24,8 @@ wallView wall =
        ,width (toString blockSize)
        ,height (toString blockSize)
        ,fill (wallColor wall.wallType)
-       ,opacity (if wall.alive
-                 then "1"
-                 else "0.2")
+       ,classList [("wall", True)
+                  ,("alive", wall.alive)]
        ,stroke "white"]
        []
 
@@ -66,12 +66,8 @@ playerView : Player -> Svg
 playerView player =
   let x = (player.position.x * blockSize)
       y = (player.position.y * blockSize)
-      alpha = (if player.alive
-               then "1"
-               else "0.5")
   in playerIcon player.alive
                 (playerColor player)
-                alpha
                 (toString x)
                 (toString y)
                 (toString blockSize)

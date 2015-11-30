@@ -8,13 +8,20 @@ import Types exposing (..)
 import Signal exposing (Address)
 import View.Scene exposing (sceneView,playerView)
 
+link : List Attribute -> List Html -> Html
+link = node "link"
+
 root : Model -> Address Action -> Html
 root model address =
   div [style [("font-family", "Amarante, sans-serif")
              ,("display", "flex")
              ,("flex-direction", "column")
              ,("align-items", "center")]]
-      [node "link" [href "//fonts.googleapis.com/css?family=Amarante&subset=latin"
+      [link [href "//fonts.googleapis.com/css?family=Amarante&subset=latin"
+            ,rel "stylesheet"
+            ,type' "text/css"]
+            []
+      ,link [href "style.css"
             ,rel "stylesheet"
             ,type' "text/css"]
             []
