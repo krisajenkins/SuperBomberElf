@@ -7,13 +7,13 @@ module Rest (application) where
 import           Network.Wai as Wai
 import           Servant
 
-type API = "code" :> Raw
+type API = "view" :> Raw
 
 api :: Proxy API
 api = Proxy
 
 server :: Server API
-server = serveDirectory "static"
+server = serveDirectory "client/dist"
 
 application :: Application
 application = serve api server
