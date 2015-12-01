@@ -29,10 +29,12 @@ instance Arbitrary Scene where
                     ,_clock = t}
 
 spec :: Spec
-spec = do playerCommandSpec
-          bombSpec
-          positionSpec
-          respawnSpec
+spec =
+  parallel $
+  do playerCommandSpec
+     bombSpec
+     positionSpec
+     respawnSpec
 
 respawnSpec :: Spec
 respawnSpec =
