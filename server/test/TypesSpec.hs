@@ -39,10 +39,9 @@ spec =
 respawnSpec :: Spec
 respawnSpec =
   describe "Respawn Rules" $
-  do it "Living things don't change." $
-       property $ \now delay -> isNothing $ respawn now delay Nothing
-     it "Dead things will respawn." $
-       property $
+  do it "Living things don't change." . property $
+       \now delay -> isNothing $ respawn now delay Nothing
+     it "Dead things will respawn." . property $
        \now delay t ->
          if addUTCTime delay t < now
             then isNothing $ respawn now delay (Just t)
@@ -51,16 +50,13 @@ respawnSpec =
 bombSpec :: Spec
 bombSpec =
   describe "Player" $
-  do it "Players without a death time are alive" $
-       property $
+  do it "Players without a death time are alive" . property $
        \player time -> not $ isDead time (player {_playerDiedAt = Nothing})
-     it "Players who die in the future are alive" $
-       property $
+     it "Players who die in the future are alive" . property $
        \player time (Positive seconds) ->
          not $
          isDead time player {_playerDiedAt = Just (addUTCTime seconds time)}
-     it "Players who die in the past are dead" $
-       property $
+     it "Players who die in the past are dead" . property $
        \player time (Positive seconds) ->
          isDead (addUTCTime seconds time)
                 (player {_playerDiedAt = Just time})
@@ -68,16 +64,15 @@ bombSpec =
 playerCommandSpec :: Spec
 playerCommandSpec =
   describe "PlayerCommand" $
-  it "PlayerCommand <-> JSON is isomorphic" $
-  property $ \cmd -> eitherDecode (encode cmd) == Right (cmd :: PlayerCommand)
+  do it "PlayerCommand <-> JSON is isomorphic" . property $
+       \cmd -> eitherDecode (encode cmd) == Right (cmd :: PlayerCommand)
 
 positionSpec :: Spec
 positionSpec =
   describe "Positions" $
-  it "A move plus its opposite equals no move." $
-  property $
-  \x1 y1 ->
-    mappend (Position x1 y1)
-            (Position (-x1)
-                      (-y1)) ==
-    mempty
+  do it "A move plus its opposite equals no move." . property $
+       \x1 y1 ->
+         mappend (Position x1 y1)
+                 (Position (-x1)
+                           (-y1)) ==
+         mempty
