@@ -15,7 +15,6 @@ import           Control.Monad.State
 import           Data.Aeson
 import           Data.Map                       (Map)
 import qualified Data.Map                       as Map
-import           Data.Maybe
 import qualified Data.Text                      as T
 import           Data.Time
 import           Data.UUID
@@ -25,6 +24,7 @@ import qualified Network.Wai.Handler.Warp       as Warp
 import           Network.Wai.Handler.WebSockets
 import           Network.WebSockets
 import qualified Network.WebSockets             as WS
+import           Render
 import qualified Rest
 import           System.Random
 import           Text.Printf
@@ -38,46 +38,6 @@ data Server =
 makeLenses ''Server
 
 ------------------------------------------------------------
-
-displayPosition :: Position -> Value
-displayPosition Position{..} = object [("x",toJSON _x),("y",toJSON _y)]
-
-displayPlayer :: ClientId -> Player -> Value
-displayPlayer playerId Player{..} =
-  object [("id",toJSON playerId)
-         ,("name",toJSON _playerName)
-         ,("position",displayPosition _playerPosition)
-         ,("alive",toJSON (isNothing _playerDiedAt))
-         ,("score",toJSON _playerScore)]
-
-displayBomb :: Bomb -> Value
-displayBomb bomb =
-  object [("position",displayPosition (view bombPosition bomb))
-         ,("blast", toJSON (view blast bomb))]
-
-displayWall :: Wall -> Value
-displayWall Wall{..} =
-  object [("position",displayPosition _wallPosition)
-         ,("alive",toJSON (isNothing _wallDiedAt))
-         ,("type",toJSON _wallType)]
-
-displayScene :: Scene -> Value
-displayScene s =
-  object [("bombs",toJSON (displayBomb <$> view bombs s))
-         ,("walls",toJSON (displayWall <$> view walls s))
-         ,("players"
-          ,toJSON (Map.foldWithKey (\k v b -> displayPlayer k v : b)
-                                   []
-                                   (view players s)))]
-
-------------------------------------------------------------
-
-acceptPlayerConnection :: TVar Server -> WS.ServerApp
-acceptPlayerConnection server pendingConnection =
-  bracket (WS.acceptRequest pendingConnection >>= playerJoins server)
-          (playerLeaves server)
-          (playerLoop server)
-
 
 readRandom :: (Random a,Monad m) => StateT Server m a
 readRandom =
@@ -94,6 +54,8 @@ readRandomR range =
 genUUID :: State Server UUID
 genUUID = readRandom
 
+------------------------------------------------------------
+
 genStartPosition :: State Server Position
 genStartPosition =
   do n <- readRandomR (0,length validStartPositions - 1)
@@ -109,36 +71,6 @@ createPlayer =
                   ,_playerDiedAt = Nothing
                   ,_playerPosition = startPosition
                   ,_playerScore = 0}
-
-addPlayerToServer :: Connection -> State Server ClientId
-addPlayerToServer conn =
-  do (newClientId,newPlayer) <- createPlayer
-     assign (scene . players . at newClientId) (Just newPlayer)
-     assign (clients . at newClientId) (Just conn)
-     return newClientId
-
-removePlayerFromServer :: ClientId -> State Server ()
-removePlayerFromServer clientId =
-  do assign (scene . players . at clientId) Nothing
-     assign (clients . at clientId) Nothing
-
-playerJoins :: TVar Server -> WS.Connection -> IO ClientId
-playerJoins server conn =
-  do (clientId,newServerState) <-
-       atomically . runStateSTM server $ addPlayerToServer conn
-     printf "JOINED: %s\n" (show clientId)
-     sendSceneToConnection (view scene newServerState)
-                           conn
-     return clientId
-
-playerLeaves :: TVar Server -> ClientId -> IO ()
-playerLeaves server clientId =
-  do atomically . modifyTVar server . execState $
-       removePlayerFromServer clientId
-     printf "DISCONNECTED: %s\n" (show clientId)
-
-playerLoop :: TVar Server -> ClientId  -> IO ()
-playerLoop server clientId = forever $ handleCommandFromPlayer server clientId
 
 handleCommandFromPlayer :: TVar Server -> ClientId -> IO ()
 handleCommandFromPlayer server clientId =
@@ -172,18 +104,46 @@ handleMessage server clientId (WS.Text rawMsg) =
 
 ------------------------------------------------------------
 
+acceptPlayerConnection :: TVar Server -> WS.ServerApp
+acceptPlayerConnection server pendingConnection =
+  bracket (WS.acceptRequest pendingConnection >>= playerJoins server)
+          (playerLeaves server)
+          (playerLoop server)
+
+addConnection :: Connection -> State Server ClientId
+addConnection conn =
+  do (newClientId,newPlayer) <- createPlayer
+     assign (scene . players . at newClientId) (Just newPlayer)
+     assign (clients . at newClientId) (Just conn)
+     return newClientId
+
+removeConnection :: ClientId -> State Server ()
+removeConnection clientId =
+  do assign (scene . players . at clientId) Nothing
+     assign (clients . at clientId) Nothing
+
+playerJoins :: TVar Server -> WS.Connection -> IO ClientId
+playerJoins server conn =
+  do (clientId,newServerState) <-
+       atomically . runStateSTM server $ addConnection conn
+     printf "JOINED: %s\n" (show clientId)
+     sendSceneToConnection (view scene newServerState)
+                           conn
+     return clientId
+
+playerLeaves :: TVar Server -> ClientId -> IO ()
+playerLeaves server clientId =
+  do atomically . modifyTVar server . execState $ removeConnection clientId
+     printf "DISCONNECTED: %s\n" (show clientId)
+
+playerLoop :: TVar Server -> ClientId  -> IO ()
+playerLoop server clientId = forever $ handleCommandFromPlayer server clientId
+
 invalidMessageHelp :: Value
 invalidMessageHelp =
   object ["validCommands" .= allPlayerCommands "<name>"
          ,"hint" .=
           String "Messages must be valid JSON, and plain strings aren't allowed as top-level JSON elements, so everything must be wrapped in a message object. Blame Doug Crockford, not me!"]
-
-processGameEvent :: TVar Server -> GameEvent -> STM ()
-processGameEvent server event =
-  modifyTVar server
-             (over scene (Engine.handleGameEvent event))
-
-------------------------------------------------------------
 
 sendSceneToPlayers :: TVar Server -> IO ()
 sendSceneToPlayers server =
@@ -197,14 +157,29 @@ sendSceneToConnection =
 
 ------------------------------------------------------------
 
+processGameEvent :: TVar Server -> GameEvent -> STM ()
+processGameEvent server event =
+  modifyTVar server
+             (over scene (Engine.handleGameEvent event))
+
+------------------------------------------------------------
+
+gameLoop :: TVar Server -> IO ()
+gameLoop server =
+  forever $
+  do tick <- Tick <$> getCurrentTime
+     atomically $ processGameEvent server tick
+     sendSceneToPlayers server
+     threadPause frameDelay
+
+------------------------------------------------------------
+
 initServer :: IO (TVar Server)
 initServer =
   do _generator <- getStdGen
      _scene <- initialScene <$> getCurrentTime
      _clients <- pure Map.empty
      atomically $ newTVar Server {..}
-
-------------------------------------------------------------
 
 runGameServer :: Config -> IO ()
 runGameServer config =
@@ -218,14 +193,6 @@ runGameServer config =
                             (acceptPlayerConnection server)
                             (Rest.application (view staticDir config)))
      printf "Finished.\n"
-
-gameLoop :: TVar Server -> IO ()
-gameLoop server =
-  forever $
-  do tick <- Tick <$> getCurrentTime
-     atomically $ processGameEvent server tick
-     sendSceneToPlayers server
-     threadPause frameDelay
 
 run :: IO ()
 run = loadConfig >>= either print runGameServer

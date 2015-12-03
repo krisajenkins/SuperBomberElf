@@ -22,6 +22,7 @@ library
                      , Types
                      , Levels
                      , Rest
+                     , Render
                      , Utils
   build-depends:       aeson
                      , async
