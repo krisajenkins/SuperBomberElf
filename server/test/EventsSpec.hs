@@ -2,6 +2,7 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 module EventsSpec (spec) where
 
+import           Control.Arrow
 import qualified Data.Map                  as Map
 import           Data.UUID
 import           Events
@@ -56,7 +57,7 @@ eventSpec =
                      (Scene Map.empty,[])
      it "Adding n players results in n players." . property $
        \((NonEmpty srcs) :: NonEmptyList (UUID,Time)) ->
-         let events = fmap (\(uuid,t) -> (AddPlayer uuid,t)) srcs
+         let events = fmap (first AddPlayer) srcs
              time = maximum (snd <$> srcs)
              (scene,_) = sceneAt (scheduleAt Map.empty events) time
          in length (_players scene) == length srcs
