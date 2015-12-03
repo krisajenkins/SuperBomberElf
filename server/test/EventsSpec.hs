@@ -21,13 +21,12 @@ instance Arbitrary Event where
           ,RemovePlayer <$> arbitrary]
 
 spec :: Spec
-spec = do scheduleSpec
-          eventSpec
+spec =
+  do scheduleSpec
+     eventSpec
 
-eventsCause
-  :: [(Event,Time)] -> Time -> (Scene,[Reaction]) -> Expectation
-eventsCause events time expected =
-  sceneAt schedule time `shouldBe` expected
+eventsCause :: [(Event,Time)] -> Time -> (Scene,[Reaction]) -> Expectation
+eventsCause events time expected = sceneAt schedule time `shouldBe` expected
   where schedule = scheduleAt Map.empty events
 
 scheduleSpec :: Spec
