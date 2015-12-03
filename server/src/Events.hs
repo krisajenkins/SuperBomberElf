@@ -72,7 +72,8 @@ handleEvent (rs,s) (AddPlayer uuid) =
   if Map.member uuid
                 (view players s)
      then (PlayerAlreadyAdded uuid : rs,s)
-     else (rs ,set (players . at uuid)
+     else (rs
+          ,set (players . at uuid)
                (Just initialPlayer)
                s)
 handleEvent (rs,s) (RemovePlayer uuid) = (rs,set (players . at uuid) Nothing s)
