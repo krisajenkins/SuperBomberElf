@@ -1,27 +1,32 @@
+{-# LANGUAGE DeriveAnyClass  #-}
+{-# LANGUAGE DeriveGeneric   #-}
 {-# LANGUAGE TemplateHaskell #-}
 module Config where
 
+import           AesonUtils
 import           Control.Lens
+import           Data.Aeson.TH    (deriveJSON)
+import           Data.Monoid
 import           Data.Time
+import           Data.Yaml
+import           GHC.Generics
+import           System.Directory
 
 data BindTo =
   BindTo {_address :: String
          ,_port    :: Int}
-  deriving (Show,Eq)
-
+  deriving (Show,Eq,Generic)
 makeLenses ''BindTo
 
-data Config =
-  Config {_playersBindTo :: BindTo}
-  deriving (Show,Eq)
+$(deriveJSON (dropPrefixJSONOptions "_") ''BindTo)
 
+data Config =
+  Config {_playersBindTo :: BindTo
+         ,_staticDir     :: FilePath}
+  deriving (Show,Eq,Generic)
 makeLenses ''Config
 
-defaultConfig :: Config
-defaultConfig =
-  Config {_playersBindTo =
-            BindTo {_address = "127.0.0.1"
-                   ,_port = 8080}}
+$(deriveJSON (dropPrefixJSONOptions "_") ''Config)
 
 -- TODO Organise:
 fuseDelay ::  NominalDiffTime
@@ -44,3 +49,10 @@ playerThrottleDelay = fromRational 0.2
 
 frameDelay :: NominalDiffTime
 frameDelay = fromRational 0.1
+
+loadConfig :: IO (Either ParseException Config)
+loadConfig =
+  do homeDirectory <- getHomeDirectory
+     let configFile = homeDirectory <> "/.bomberman.yaml"
+     putStrLn $ "Reading config: " <> configFile
+     decodeFileEither configFile

@@ -216,7 +216,7 @@ runGameServer config =
      Warp.run p
               (websocketsOr defaultConnectionOptions
                             (acceptPlayerConnection server)
-                            Rest.application)
+                            (Rest.application (view staticDir config)))
      printf "Finished.\n"
 
 gameLoop :: TVar Server -> IO ()
@@ -228,4 +228,4 @@ gameLoop server =
      threadPause frameDelay
 
 run :: IO ()
-run = runGameServer defaultConfig
+run = loadConfig >>= either print runGameServer

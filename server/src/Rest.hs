@@ -12,8 +12,5 @@ type API = "view" :> Raw
 api :: Proxy API
 api = Proxy
 
-server :: Server API
-server = serveDirectory "client/dist"
-
-application :: Application
-application = serve api server
+application :: FilePath -> Application
+application = serve api . serveDirectory
