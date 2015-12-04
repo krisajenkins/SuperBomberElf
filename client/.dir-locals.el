@@ -6,7 +6,7 @@
                '(lambda ()
                   (interactive)
                   (require 'magit)
-                  (let ((compile-command (format "cd %sclient ; smake"
+                  (let ((compile-command (format "cd %sclient ; ./smake"
                                                  (magit-toplevel))))
                     (save-buffer)
                     (compile compile-command))))))
