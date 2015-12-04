@@ -26,11 +26,11 @@ root model address =
             ,type' "text/css"]
             []
       ,h1 [style [("font-size", "3rem")]]
-          [Html.text "Super Bomber Elf"]
+          [text "Super Bomber Elf"]
       ,case model.scene of
         Just (Ok scene) -> sceneLoadedView scene
-        Just (Err e) -> Html.text ("ERROR: " ++ e)
-        Nothing -> i [] [Html.text "Waiting for data..."]]
+        Just (Err e) -> text ("ERROR: " ++ e)
+        Nothing -> i [] [text "Waiting for data..."]]
 
 sceneLoadedView : Scene -> Html
 sceneLoadedView scene =
