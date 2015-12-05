@@ -2,6 +2,7 @@
 
 A Super Bomberman clone. Written for [http://www.meetup.com/West-London-Hack-Night/](West London Hack Night).
 
+![Super Bomber Elf](screenshot.png)
 
 ## Building & Running
 
