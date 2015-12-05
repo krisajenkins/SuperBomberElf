@@ -5,7 +5,7 @@ A Super Bomberman clone. Written for [http://www.meetup.com/West-London-Hack-Nig
 
 ## Building & Running
 
-You'll need [https://github.com/commercialhaskell/stack](stack) and [http://elm-lang.org/](Elm).
+You'll need [stack](https://github.com/commercialhaskell/stack) and [Elm](http://elm-lang.org/).
 
 (Note: If this is the first time you've run `stack`, it might take a
 while to fetch & build the dependencies. Have coffee ready.)
