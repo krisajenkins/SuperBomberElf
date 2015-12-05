@@ -72,8 +72,8 @@ createPlayer =
                   ,_playerPosition = startPosition
                   ,_playerScore = 0}
 
-handleCommandFromPlayer :: TVar Server -> ClientId -> IO ()
-handleCommandFromPlayer server clientId =
+handleCommandFromClient :: TVar Server -> ClientId -> IO ()
+handleCommandFromClient server clientId =
   do serverState <- atomically $ readTVar server
      (Just conn) <- pure $ view (clients . at clientId) serverState
      dataMessage <- WS.receiveDataMessage conn
@@ -96,19 +96,20 @@ handleMessage server clientId (WS.Text rawMsg) =
                        (show e)
                 WS.send conn (toMessage invalidMessageHelp)
            Right cmd ->
-             do atomically $
-                  processGameEvent server
-                                   (FromPlayer clientId cmd)
-                sendSceneToPlayers server
+             do newServerState <-
+                  atomically $
+                  processGameEvent (FromPlayer clientId cmd)
+                                   server
+                sendSceneToClients newServerState
                 threadPause playerThrottleDelay
 
 ------------------------------------------------------------
 
-acceptPlayerConnection :: TVar Server -> WS.ServerApp
-acceptPlayerConnection server pendingConnection =
-  bracket (WS.acceptRequest pendingConnection >>= playerJoins server)
-          (playerLeaves server)
-          (playerLoop server)
+acceptClientConnection :: TVar Server -> WS.ServerApp
+acceptClientConnection server pendingConnection =
+  bracket (WS.acceptRequest pendingConnection >>= clientJoins server)
+          (clientLeaves server)
+          (clientLoop server)
 
 addConnection :: Connection -> State Server ClientId
 addConnection conn =
@@ -122,8 +123,8 @@ removeConnection clientId =
   do assign (scene . players . at clientId) Nothing
      assign (clients . at clientId) Nothing
 
-playerJoins :: TVar Server -> WS.Connection -> IO ClientId
-playerJoins server conn =
+clientJoins :: TVar Server -> WS.Connection -> IO ClientId
+clientJoins server conn =
   do (clientId,newServerState) <-
        atomically . runStateSTM server $ addConnection conn
      printf "JOINED: %s\n" (show clientId)
@@ -131,13 +132,13 @@ playerJoins server conn =
                            conn
      return clientId
 
-playerLeaves :: TVar Server -> ClientId -> IO ()
-playerLeaves server clientId =
+clientLeaves :: TVar Server -> ClientId -> IO ()
+clientLeaves server clientId =
   do atomically . modifyTVar server . execState $ removeConnection clientId
      printf "DISCONNECTED: %s\n" (show clientId)
 
-playerLoop :: TVar Server -> ClientId  -> IO ()
-playerLoop server clientId = forever $ handleCommandFromPlayer server clientId
+clientLoop :: TVar Server -> ClientId  -> IO ()
+clientLoop server clientId = forever $ handleCommandFromClient server clientId
 
 invalidMessageHelp :: Value
 invalidMessageHelp =
@@ -145,11 +146,10 @@ invalidMessageHelp =
          ,"hint" .=
           String "Messages must be valid JSON, and plain strings aren't allowed as top-level JSON elements, so everything must be wrapped in a message object. Blame Doug Crockford, not me!"]
 
-sendSceneToPlayers :: TVar Server -> IO ()
-sendSceneToPlayers server =
-  do serverState <- atomically $ readTVar server
-     mapM_ (sendSceneToConnection (view scene serverState))
-           (Map.elems (view clients serverState))
+sendSceneToClients :: Server -> IO ()
+sendSceneToClients serverState =
+  mapM_ (sendSceneToConnection (view scene serverState))
+        (Map.elems (view clients serverState))
 
 sendSceneToConnection :: Scene -> WS.Connection -> IO ()
 sendSceneToConnection =
@@ -157,10 +157,12 @@ sendSceneToConnection =
 
 ------------------------------------------------------------
 
-processGameEvent :: TVar Server -> GameEvent -> STM ()
-processGameEvent server event =
-  modifyTVar server
-             (over scene (Engine.handleGameEvent event))
+processGameEvent :: GameEvent -> TVar Server -> STM Server
+processGameEvent event server =
+  do _ <-
+       modifyTVar server
+                  (over scene (Engine.handleGameEvent event))
+     readTVar server
 
 ------------------------------------------------------------
 
@@ -168,8 +170,8 @@ gameLoop :: TVar Server -> IO ()
 gameLoop server =
   forever $
   do tick <- Tick <$> getCurrentTime
-     atomically $ processGameEvent server tick
-     sendSceneToPlayers server
+     serverState <- atomically $ processGameEvent tick server
+     sendSceneToClients serverState
      threadPause frameDelay
 
 ------------------------------------------------------------
@@ -190,7 +192,7 @@ runGameServer config =
      printf "Starting webserver on: %d\n" p
      Warp.run p
               (websocketsOr defaultConnectionOptions
-                            (acceptPlayerConnection server)
+                            (acceptClientConnection server)
                             (Rest.application (view staticDir config)))
      printf "Finished.\n"
 
