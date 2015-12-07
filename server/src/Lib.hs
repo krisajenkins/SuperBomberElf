@@ -97,8 +97,8 @@ handleMessage server clientId (WS.Text rawMsg) =
            Right cmd ->
              do newServerState <-
                   atomically $
-                  processGameEvent (FromPlayer clientId cmd)
-                                   server
+                  processGameEvent server
+                                   (FromPlayer clientId cmd)
                 sendSceneToClients newServerState
                 threadPause playerThrottleDelay
 
@@ -156,8 +156,8 @@ sendSceneToConnection =
 
 ------------------------------------------------------------
 
-processGameEvent :: GameEvent -> TVar Server -> STM Server
-processGameEvent event server =
+processGameEvent :: TVar Server -> GameEvent -> STM Server
+processGameEvent server event =
   do _ <-
        modifyTVar server
                   (over scene (Engine.handleGameEvent event))
@@ -169,7 +169,7 @@ gameLoop :: TVar Server -> IO ()
 gameLoop server =
   forever $
   do tick <- Tick <$> getCurrentTime
-     serverState <- atomically $ processGameEvent tick server
+     serverState <- atomically $ processGameEvent server tick
      sendSceneToClients serverState
      threadPause frameDelay
 
