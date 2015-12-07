@@ -2,6 +2,7 @@ module App where
 
 import StartApp exposing (..)
 import State exposing (websocketMailbox)
+import Time
 import Html exposing (Html)
 import Task exposing (Task)
 import Effects exposing (Never)
@@ -22,12 +23,13 @@ app = StartApp.start {init = State.init
                      ,update = \action model -> let newModel = State.update action model
                                                     newEffects = State.effect action newModel
                                                 in (newModel, newEffects)
-                     ,inputs = [Signal.map (NewScene << Json.decodeString decodeScene)
+                     ,inputs = [Signal.map (MessageReceived << Json.decodeString decodeServerMessage)
                                            (WS.connect "ws://localhost:8080"
                                                        websocketMailbox.signal)
                                ,Signal.filterMap messageFor NoOp Keyboard.arrows
                                ,Signal.filterMap messageFor NoOp Keyboard.wasd
-                               ,Signal.map (\v -> if v then Message DropBomb else NoOp) Keyboard.space]}
+                               ,Signal.map Tick (Time.fps 1)
+                               ,Signal.map (\v -> if v then PlayerMessage DropBomb else NoOp) Keyboard.space]}
 
 main : Signal Html
 main = app.html

@@ -39,12 +39,21 @@ type alias Scene =
   ,bombs : List Bomb}
 
 type alias Model =
-  {scene : Maybe (Result String Scene)}
+  {scene : Maybe Scene
+  ,lastError : Maybe String}
+
+type alias Help =
+  {validCommands : List String}
+
+type ServerMessage
+  = SceneMessage Scene
+  | HelpMessage Help
 
 type Action
   = MessageSent
-  | NewScene (Result String Scene)
-  | Message PlayerCommand
+  | MessageReceived (Result String ServerMessage)
+  | PlayerMessage PlayerCommand
+  | Tick Float
   | NoOp
 
 type Direction
@@ -55,6 +64,7 @@ type Direction
 
 type PlayerCommand
   = DropBomb
+  | Look
   | SetName String
   | Move Direction
 
@@ -109,11 +119,22 @@ decodeScene =
     ("players" := list decodePlayer)
     ("bombs" := list decodeBomb)
 
+decodeHelp : Decoder Help
+decodeHelp =
+  object1 Help
+    ("validCommands" := list string)
+
+decodeServerMessage : Decoder ServerMessage
+decodeServerMessage =
+  oneOf [map SceneMessage decodeScene
+        ,map HelpMessage decodeHelp]
+
 encodePlayerCommand : PlayerCommand -> Value
 encodePlayerCommand command =
   Encode.object
     [("command", (case command of
                     DropBomb -> Encode.string "DropBomb"
+                    Look -> Encode.string "Look"
                     SetName name -> Encode.list <| List.map Encode.string ["SetName",name]
                     Move d -> Encode.string <| "Move" ++ toString d))]
 
@@ -128,4 +149,4 @@ directionFor d =
 
 messageFor : { x : Int, y : Int } -> Maybe Action
 messageFor d =
-  Maybe.map (Message << Move) (directionFor d)
+  Maybe.map (PlayerMessage << Move) (directionFor d)

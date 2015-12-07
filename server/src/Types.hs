@@ -100,15 +100,17 @@ makeLenses ''Scene
 
 data PlayerCommand
   = DropBomb
+  | Look
   | SetName Text
   | Move Direction
   deriving (Eq,Show,Generic)
 
 allPlayerCommands :: Text -> [PlayerCommand]
-allPlayerCommands name = DropBomb : SetName name : (Move <$> [minBound ..])
+allPlayerCommands name = Look : DropBomb : SetName name : (Move <$> [minBound ..])
 
 instance ToJSON PlayerCommand where
   toJSON DropBomb = object [("command",toJSON $ show DropBomb)]
+  toJSON Look = object [("command",toJSON $ show Look)]
   toJSON (SetName name) = object [("command",toJSON ("SetName" :: Text,name))]
   toJSON (Move d) = object [("command",toJSON $ "Move" <> show d)]
 
@@ -116,6 +118,7 @@ instance FromJSON PlayerCommand where
   parseJSON (Object o) = o .: "command"
   parseJSON (Array (V.toList -> [String "SetName",String s])) = pure $ SetName s
   parseJSON (String "DropBomb") = pure DropBomb
+  parseJSON (String "Look") = pure Look
   parseJSON (String (T.splitAt 4 -> ("Move",dir))) =
     Move <$> parseJSON (String dir)
   parseJSON _ = fail "Invalid command."

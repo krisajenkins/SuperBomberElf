@@ -28,8 +28,7 @@ root model address =
       ,h1 [style [("font-size", "3rem")]]
           [text "Super Bomber Elf"]
       ,case model.scene of
-        Just (Ok scene) -> sceneLoadedView scene
-        Just (Err e) -> text ("ERROR: " ++ e)
+        Just scene -> sceneLoadedView scene
         Nothing -> i [] [text "Waiting for data..."]]
 
 sceneLoadedView : Scene -> Html
@@ -62,7 +61,7 @@ playerBadgeView player =
 debuggingView : Model -> Html
 debuggingView model =
   case model.scene of
-   Just (Ok scene) -> div []
-                          [div [] [code [] [text (toString scene.bombs)]]
-                          ,div [] [code [] [text (toString scene.players)]]]
+   Just scene -> div []
+                     [div [] [code [] [text (toString scene.bombs)]]
+                     ,div [] [code [] [text (toString scene.players)]]]
    _ -> span [] []

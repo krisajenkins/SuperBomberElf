@@ -29,7 +29,9 @@ handlePlayerCommand playerId (Move direction) scene =
              else player
 
 handlePlayerCommand playerId (SetName s) scene =
-  set (players . ix playerId .playerName) s scene
+  set (players . ix playerId . playerName) s scene
+
+handlePlayerCommand _ Look scene = scene
 
 handlePlayerCommand playerId DropBomb scene =
   case view (players . at playerId) scene of

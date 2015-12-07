@@ -7,23 +7,28 @@ import Json.Encode as Encode
 
 init : (Model, Effects Action)
 init =
-  ({scene = Nothing}
+  ({scene = Nothing
+  ,lastError = Nothing}
   ,sendMessage (SetName "WLHN"))
 
 update : Action -> Model -> Model
 update action model =
   case action of
-    NewScene scene -> {model | scene = Just scene}
+    MessageReceived (Ok (SceneMessage scene)) -> {model | scene = Just scene}
+    MessageReceived (Ok (HelpMessage _)) -> model
+    MessageReceived (Err error) -> {model | lastError = Just error}
     NoOp -> model
-    Message _ -> model
+    Tick _ -> model
+    PlayerMessage _ -> model
     MessageSent -> model
 
 effect : Action -> Model -> Effects Action
 effect action model =
   case action of
-    NewScene _ -> none
+    MessageReceived _ -> none
     NoOp -> none
-    Message msg -> sendMessage msg
+    Tick _ -> sendMessage Look
+    PlayerMessage msg -> sendMessage msg
     MessageSent -> none
 
 sendMessage : PlayerCommand -> Effects Action

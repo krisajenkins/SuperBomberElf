@@ -30,8 +30,12 @@ import           Text.Printf
 import           Types
 import           Utils
 
+data ClientConnection =
+  ClientConnection {_connection :: WS.Connection}
+makeLenses ''ClientConnection
+
 data Server =
-  Server {_clients   :: Map ClientId WS.Connection
+  Server {_clients   :: Map ClientId ClientConnection
          ,_scene     :: Scene
          ,_generator :: StdGen}
 makeLenses ''Server
@@ -74,8 +78,8 @@ createPlayer =
 handleCommandFromClient :: TVar Server -> ClientId -> IO ()
 handleCommandFromClient server clientId =
   do serverState <- atomically $ readTVar server
-     (Just conn) <- pure $ view (clients . at clientId) serverState
-     dataMessage <- WS.receiveDataMessage conn
+     (Just clientConnection) <- pure $ view (clients . at clientId) serverState
+     dataMessage <- WS.receiveDataMessage (view connection clientConnection)
      handleMessage server clientId dataMessage
 
 handleMessage :: TVar Server -> ClientId -> WS.DataMessage -> IO ()
@@ -83,23 +87,26 @@ handleMessage _ _ (WS.Text "") = pure ()
 handleMessage _ _ (WS.Binary _) = pure ()
 handleMessage server clientId (WS.Text rawMsg) =
   do serverState <- atomically $ readTVar server
-     mConnection <- pure $ view (clients . at clientId) serverState
-     case mConnection of
+     mClientConnection <- pure $ view (clients . at clientId) serverState
+     case mClientConnection of
        Nothing ->
          printf "SERVER ERROR - CONNECTION NOT FOUND: %s\n" (show clientId)
-       Just conn ->
+       Just clientConnection ->
          case eitherDecode rawMsg of
            Left e ->
              do printf "ERR %s: %s\n"
                        (show clientId)
                        (show e)
-                WS.send conn (toMessage invalidMessageHelp)
+                WS.send (view connection clientConnection)
+                        (toMessage helpMessage)
            Right cmd ->
              do newServerState <-
                   atomically $
-                  processGameEvent server
-                                   (FromPlayer clientId cmd)
-                sendSceneToClients newServerState
+                  do processGameEvent server
+                                      (FromPlayer clientId cmd)
+                     readTVar server
+                sendSceneToClient (view scene newServerState)
+                                  clientConnection
                 threadPause playerThrottleDelay
 
 ------------------------------------------------------------
@@ -114,7 +121,7 @@ addConnection :: WS.Connection -> State Server ClientId
 addConnection conn =
   do (newClientId,newPlayer) <- createPlayer
      assign (scene . players . at newClientId) (Just newPlayer)
-     assign (clients . at newClientId) (Just conn)
+     assign (clients . at newClientId) (Just (ClientConnection conn))
      return newClientId
 
 removeConnection :: ClientId -> State Server ()
@@ -127,8 +134,12 @@ clientJoins server conn =
   do (clientId,newServerState) <-
        atomically . runStateSTM server $ addConnection conn
      printf "JOINED: %s\n" (show clientId)
-     sendSceneToConnection (view scene newServerState)
-                           conn
+     Just clientConnection <-
+       pure $ (view (clients . at clientId) newServerState)
+     WS.send (view connection clientConnection)
+             (toMessage helpMessage)
+     sendSceneToClient (view scene newServerState)
+                       clientConnection
      return clientId
 
 clientLeaves :: TVar Server -> ClientId -> IO ()
@@ -139,38 +150,33 @@ clientLeaves server clientId =
 clientLoop :: TVar Server -> ClientId  -> IO ()
 clientLoop server clientId = forever $ handleCommandFromClient server clientId
 
-invalidMessageHelp :: Value
-invalidMessageHelp =
+helpMessage :: Value
+helpMessage =
   object ["validCommands" .= allPlayerCommands "<name>"
          ,"hint" .=
           String "Messages must be valid JSON, and plain strings aren't allowed as top-level JSON elements, so everything must be wrapped in a message object. Blame Doug Crockford, not me!"]
 
-sendSceneToClients :: Server -> IO ()
-sendSceneToClients serverState =
-  mapM_ (sendSceneToConnection (view scene serverState))
-        (Map.elems (view clients serverState))
-
-sendSceneToConnection :: Scene -> WS.Connection -> IO ()
-sendSceneToConnection =
-  flip WS.send . WS.DataMessage . WS.Text . encode . displayScene
+sendSceneToClient :: Scene -> ClientConnection -> IO ()
+sendSceneToClient currentScene clientConnection =
+  WS.send (view connection clientConnection)
+          (WS.DataMessage . WS.Text . encode . displayScene $ currentScene)
 
 ------------------------------------------------------------
 
-processGameEvent :: TVar Server -> GameEvent -> STM Server
+processGameEvent :: TVar Server -> GameEvent -> STM ()
 processGameEvent server event =
-  do _ <-
-       modifyTVar server
-                  (over scene (Engine.handleGameEvent event))
-     readTVar server
+  modifyTVar server
+             (over scene (Engine.handleGameEvent event))
 
 ------------------------------------------------------------
 
+-- TODO The frame rate is actually frameDelay *plus* the time it takes
+--  to get the tick processed. Not ideal.
 gameLoop :: TVar Server -> IO ()
 gameLoop server =
   forever $
   do tick <- Tick <$> getCurrentTime
-     serverState <- atomically $ processGameEvent server tick
-     sendSceneToClients serverState
+     _ <- atomically $ processGameEvent server tick
      threadPause frameDelay
 
 ------------------------------------------------------------
