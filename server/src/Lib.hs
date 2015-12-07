@@ -22,7 +22,6 @@ import           Engine
 import           Levels
 import qualified Network.Wai.Handler.Warp       as Warp
 import           Network.Wai.Handler.WebSockets
-import           Network.WebSockets
 import qualified Network.WebSockets             as WS
 import           Render
 import qualified Rest
@@ -111,7 +110,7 @@ acceptClientConnection server pendingConnection =
           (clientLeaves server)
           (clientLoop server)
 
-addConnection :: Connection -> State Server ClientId
+addConnection :: WS.Connection -> State Server ClientId
 addConnection conn =
   do (newClientId,newPlayer) <- createPlayer
      assign (scene . players . at newClientId) (Just newPlayer)
@@ -191,7 +190,7 @@ runGameServer config =
      let p = view (playersBindTo . port) config
      printf "Starting webserver on: %d\n" p
      Warp.run p
-              (websocketsOr defaultConnectionOptions
+              (websocketsOr WS.defaultConnectionOptions
                             (acceptClientConnection server)
                             (Rest.application (view staticDir config)))
      printf "Finished.\n"
