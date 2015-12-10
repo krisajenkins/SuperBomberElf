@@ -13,6 +13,7 @@ import           Control.Lens                   hiding ((.=))
 import           Control.Monad
 import           Control.Monad.State
 import           Data.Aeson
+import qualified Data.ByteString.Char8          as BS
 import           Data.Map                       (Map)
 import qualified Data.Map                       as Map
 import qualified Data.Text                      as T
@@ -26,6 +27,7 @@ import qualified Network.WebSockets             as WS
 import           Render
 import qualified Rest
 import           System.Random
+import qualified System.Remote.Monitoring       as EKG
 import           Text.Printf
 import           Types
 import           Utils
@@ -188,10 +190,16 @@ initServer =
      _clients <- pure Map.empty
      atomically $ newTVar Server {..}
 
+startEkg :: BindTo -> IO EKG.Server
+startEkg bindTo =
+  do printf "Monitoring on port: %s\n" (show bindTo)
+     EKG.forkServer (BS.pack (view address bindTo)) (view port bindTo)
+
 runGameServer :: Config -> IO ()
 runGameServer config =
-  do printf "Starting game loop thread.\n"
+  do _ <- startEkg (view ekgBindsTo config)
      server <- initServer
+     printf "Starting game loop thread.\n"
      _ <- forkIO $ gameLoop server
      let p = view (playersBindTo . port) config
      printf "Starting webserver on: %d\n" p

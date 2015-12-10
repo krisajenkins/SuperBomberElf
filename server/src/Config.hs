@@ -22,6 +22,7 @@ $(deriveJSON (dropPrefixJSONOptions "_") ''BindTo)
 
 data Config =
   Config {_playersBindTo :: BindTo
+         ,_ekgBindsTo    :: BindTo
          ,_staticDir     :: FilePath}
   deriving (Show,Eq,Generic)
 makeLenses ''Config

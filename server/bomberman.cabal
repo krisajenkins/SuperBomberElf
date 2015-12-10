@@ -30,6 +30,7 @@ library
                      , bytestring
                      , containers
                      , directory
+                     , ekg
                      , lens
                      , mtl
                      , network
