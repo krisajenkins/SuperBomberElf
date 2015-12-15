@@ -34,8 +34,8 @@ root model address =
 sceneLoadedView : Scene -> Html
 sceneLoadedView scene =
   div [style [("display", "flex")]]
-      [sceneView scene
-      ,playerGuideView scene]
+      [div [style [("width", "40vw")]] [playerGuideView scene]
+      ,div [style [("width", "40vw")]] [sceneView scene]]
 
 playerGuideView : Scene -> Html
 playerGuideView scene =
@@ -46,16 +46,16 @@ playerBadgeView : Player -> Html
 playerBadgeView player =
   div [style [("display", "flex")
              ,("align-items", "center")]]
-      [span [style [("font-size", "1.6rem")
-                   ,("margin", "1.2rem")]]
+      [span [style [("font-size", "1.3rem")
+                   ,("margin", "0.5rem")]]
             [text (toString player.score)]
-      ,Svg.svg [Svg.Attributes.width "60"
-               ,Svg.Attributes.height "60"
+      ,Svg.svg [Svg.Attributes.width "40"
+               ,Svg.Attributes.height "40"
                ,Svg.Attributes.viewBox "0 0 50 50"
                ,Svg.Attributes.preserveAspectRatio "xMaxYMax"]
            [playerView {player | position = Position 0 0}]
-      ,span [style [("font-size", "1.6rem")
-                   ,("margin", "1.2rem")]]
+      ,span [style [("font-size", "1.3rem")
+                   ,("margin", "0.5rem")]]
             [text (Maybe.withDefault player.id player.name)]]
 
 debuggingView : Model -> Html

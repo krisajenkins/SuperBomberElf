@@ -15,7 +15,7 @@ wallColor t =
     Weak -> "lightsalmon"
 
 blockSize : Int
-blockSize  = 50
+blockSize  = 35
 
 wallView : Wall -> Svg
 wallView wall =
