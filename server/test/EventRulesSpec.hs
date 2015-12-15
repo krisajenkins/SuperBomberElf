@@ -1,14 +1,16 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
-module EventsSpec (spec) where
+module EventRulesSpec (spec) where
 
 import           Control.Arrow
+import           Control.Lens
 import qualified Data.Map                  as Map
 import           Data.UUID
-import           Events
+import           EventRules
 import           Test.Hspec
 import           Test.QuickCheck
 import           Test.QuickCheck.Instances ()
+import           Types                     (Position (..))
 import           Utils
 
 instance Arbitrary UUID where
@@ -21,34 +23,25 @@ instance Arbitrary Event where
           ,RemovePlayer <$> arbitrary]
 
 spec :: Spec
-spec =
-  do scheduleSpec
-     eventSpec
+spec = do playerEventSpec
 
 eventsCause :: [(Event,Time)] -> Time -> (Scene,[Reaction]) -> Expectation
-eventsCause events time expected = sceneAt schedule time `shouldBe` expected
-  where schedule = scheduleAt Map.empty events
+eventsCause events time expected = sceneAt time schedule `shouldBe` expected
+  where schedule = scheduleFrom Map.empty events
 
-scheduleSpec :: Spec
-scheduleSpec =
-  describe "Schedule Handling" $
-  it "Future events are not processed." . property $
-  \(t,(e1,e2)) ->
-    (sceneAt (scheduleAt Map.empty
-                         [(e1,t)])
-             t) `shouldBe`
-    (sceneAt (scheduleAt Map.empty
-                         [(e1,t),(e2,addTime 5 t)])
-             t)
-
-eventSpec :: Spec
-eventSpec =
-  describe "Event Processing" $
+playerEventSpec :: Spec
+playerEventSpec =
+  describe "Player Events" $
   do it "Join and name should result in one named player" . property $
        \(t,uuid,name) ->
-         eventsCause [(AddPlayer uuid,t),(SetPlayerName uuid name,addTime 5 t)]
-                     (addTime 10 t)
-                     (Scene {_players = Map.fromList [(uuid,Player name)]},[])
+         eventsCause
+           [(AddPlayer uuid,t),(SetPlayerName uuid name,addTime 5 t)]
+           (addTime 10 t)
+           (Scene {_players =
+                     Map.fromList
+                       [(uuid
+                        ,set playerName name (initialPlayer (Position 1 1)))]}
+           ,[])
      it "Removing a non-existent player shouldn't matter." . property $
        \(t,uuid) ->
          eventsCause [(RemovePlayer uuid,t)]
@@ -58,12 +51,13 @@ eventSpec =
        \((NonEmpty srcs) :: NonEmptyList (UUID,Time)) ->
          let events = fmap (first AddPlayer) srcs
              time = maximum (snd <$> srcs)
-             (scene,_) = sceneAt (scheduleAt Map.empty events) time
+             (scene,_) = sceneAt time (scheduleFrom Map.empty events)
          in length (_players scene) == length srcs
      it "Double adding a player causes an error." . property $
        \(t1,t2,uuid) ->
          eventsCause
            [(AddPlayer uuid,t1),(AddPlayer uuid,t2)]
            (max t1 t2)
-           (Scene {_players = Map.fromList [(uuid,Player Nothing)]}
+           (Scene {_players =
+                     Map.fromList [(uuid,initialPlayer (Position 1 1))]}
            ,[PlayerAlreadyAdded uuid])
