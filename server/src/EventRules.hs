@@ -4,7 +4,7 @@
 {-# LANGUAGE RecordWildCards  #-}
 {-# LANGUAGE TemplateHaskell  #-}
 module EventRules
-       (Event(..), Scene(..), Player(..),playerName, Time, Reaction(..), sceneAt,
+       (Event(..),PlayerEvent(..), Scene(..), Player(..),playerName, Time, Reaction(..), sceneAt,
         scheduleFrom,initialPlayer)
        where
 
@@ -21,11 +21,15 @@ import           Types             (Position (..))
 
 data GameConfig = GameConfig {fuseTime :: NominalDiffTime}
 
-data Event
-  = AddPlayer UUID
-  | SetPlayerName UUID
-                  (Maybe String)
-  | RemovePlayer UUID
+data PlayerEvent
+  = Join
+  | SetName (Maybe String)
+  | Leave
+  deriving (Show,Eq)
+
+data Event =
+  FromPlayer UUID
+             PlayerEvent
   deriving (Show,Eq)
 
 data Reaction =
@@ -46,16 +50,16 @@ data Scene =
 makeLenses ''Scene
 
 handleEvent :: Event -> RWS GameConfig [Reaction] Scene ()
-handleEvent (AddPlayer uuid) =
+handleEvent (FromPlayer uuid Join) =
   do player <- use (players . at uuid)
      case player of
        Just _ -> reaction (PlayerAlreadyAdded uuid)
        Nothing ->
          assign (players . at uuid)
                 (Just (initialPlayer (Position 1 1)))
-handleEvent (SetPlayerName uuid name) =
+handleEvent (FromPlayer uuid (SetName name)) =
   assign (players . ix uuid . playerName) name
-handleEvent (RemovePlayer uuid) = assign (players . at uuid) Nothing
+handleEvent (FromPlayer uuid Leave) = assign (players . at uuid) Nothing
 
 initialScene :: Scene
 initialScene = Scene {_players = Map.empty}
