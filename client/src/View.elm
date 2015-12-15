@@ -37,10 +37,19 @@ sceneLoadedView scene =
       [div [style [("width", "40vw")]] [playerGuideView scene]
       ,div [style [("width", "40vw")]] [sceneView scene]]
 
+playerSort : Player -> Player -> Order
+playerSort a b =
+  case (a.name, b.name) of
+    (Nothing, Nothing) -> compare a.score b.score
+    (Just _, Nothing) -> LT
+    (Nothing, Just _) -> GT
+    (Just aName, Just bName) -> compare a.score b.score
+
 playerGuideView : Scene -> Html
 playerGuideView scene =
   div []
-      (List.map playerBadgeView scene.players)
+      (List.map playerBadgeView
+                (List.sortWith playerSort scene.players))
 
 playerBadgeView : Player -> Html
 playerBadgeView player =
