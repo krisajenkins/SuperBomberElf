@@ -28,7 +28,7 @@ app = StartApp.start {init = State.init
                                                        websocketMailbox.signal)
                                ,Signal.filterMap messageFor NoOp Keyboard.arrows
                                ,Signal.filterMap messageFor NoOp Keyboard.wasd
-                               ,Signal.map Tick (Time.fps 1)
+                               ,Signal.map Tick (Time.fps 5)
                                ,Signal.map (\v -> if v then PlayerMessage DropBomb else NoOp) Keyboard.space]}
 
 main : Signal Html
