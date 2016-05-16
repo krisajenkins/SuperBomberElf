@@ -15,48 +15,33 @@ init =
   )
 
 
-update : Action -> Model -> Model
+update : Action -> Model -> ( Model, Effects Action )
 update action model =
   case action of
     MessageReceived (Ok (SceneMessage scene)) ->
-      { model | scene = Just scene }
+      ( { model | scene = Just scene }
+      , none
+      )
 
     MessageReceived (Ok (HelpMessage _)) ->
-      model
+      ( model, none )
 
     MessageReceived (Err error) ->
-      { model | lastError = Just error }
+      ( { model | lastError = Just error }
+      , none
+      )
 
     NoOp ->
-      model
+      ( model, none )
 
     Tick _ ->
-      model
+      ( model, sendMessage Look )
 
-    PlayerMessage _ ->
-      model
-
-    MessageSent ->
-      model
-
-
-effect : Action -> Model -> Effects Action
-effect action model =
-  case action of
-    MessageReceived _ ->
-      none
-
-    NoOp ->
-      none
-
-    Tick _ ->
-      sendMessage Look
-
-    PlayerMessage msg ->
-      sendMessage msg
+    PlayerMessage cmd ->
+      ( model, sendMessage cmd )
 
     MessageSent ->
-      none
+      ( model, none )
 
 
 sendMessage : PlayerCommand -> Effects Action

@@ -1,16 +1,16 @@
 module App (..) where
 
+import Effects exposing (Never)
+import Html exposing (Html)
+import Json.Decode as Json
+import Keyboard
+import Signal exposing (constant)
 import StartApp exposing (..)
 import State exposing (websocketMailbox)
-import Time
-import Html exposing (Html)
 import Task exposing (Task)
-import Effects exposing (Never)
-import View
-import Keyboard
+import Time
 import Types exposing (..)
-import Signal exposing (constant)
-import Json.Decode as Json
+import View
 import WebSocket as WS
 
 
@@ -23,17 +23,8 @@ app : App Model
 app =
   StartApp.start
     { init = State.init
-    , view = flip View.root
-    , update =
-        \action model ->
-          let
-            newModel =
-              State.update action model
-
-            newEffects =
-              State.effect action newModel
-          in
-            ( newModel, newEffects )
+    , view = View.root
+    , update = State.update
     , inputs =
         [ Signal.map
             (MessageReceived << Json.decodeString decodeServerMessage)

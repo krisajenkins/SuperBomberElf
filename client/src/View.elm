@@ -14,8 +14,8 @@ link =
   node "link"
 
 
-root : Model -> Address Action -> Html
-root model address =
+root : Address Action -> Model -> Html
+root address model =
   div
     [ style
         [ ( "font-family", "Amarante, sans-serif" )
