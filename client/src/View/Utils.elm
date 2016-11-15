@@ -1,10 +1,11 @@
-module View.Utils (..) where
+module View.Utils exposing (..)
 
+import String
 import Svg exposing (Attribute)
 import Svg.Attributes exposing (class)
-import String
+import Tuple exposing (..)
 
 
-classList : List ( String, Bool ) -> Attribute
+classList : List ( String, Bool ) -> Attribute msg
 classList =
-  List.filter snd >> List.map fst >> String.join " " >> class
+    List.filter second >> List.map first >> String.join " " >> class

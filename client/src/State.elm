@@ -1,57 +1,67 @@
-module State (..) where
+module State exposing (..)
 
-import Effects exposing (..)
-import Signal exposing (Signal, Mailbox)
-import Types exposing (..)
+import Json.Decode as Json exposing (decodeString)
 import Json.Encode as Encode
+import Keyboard
+import Time exposing (every, millisecond)
+import Types exposing (..)
+import WebSocket
 
 
-init : ( Model, Effects Action )
+init : ( Model, Cmd Msg )
 init =
-  ( { scene = Nothing
-    , lastError = Nothing
-    }
-  , sendMessage (SetName "WLHN")
-  )
+    ( { scene = Nothing
+      , lastError = Nothing
+      }
+    , sendMessage (SetName "WLHN")
+    )
 
 
-update : Action -> Model -> ( Model, Effects Action )
-update action model =
-  case action of
-    MessageReceived (Ok (SceneMessage scene)) ->
-      ( { model | scene = Just scene }
-      , none
-      )
-
-    MessageReceived (Ok (HelpMessage _)) ->
-      ( model, none )
-
-    MessageReceived (Err error) ->
-      ( { model | lastError = Just error }
-      , none
-      )
-
-    NoOp ->
-      ( model, none )
-
-    Tick _ ->
-      ( model, sendMessage Look )
-
-    PlayerMessage cmd ->
-      ( model, sendMessage cmd )
-
-    MessageSent ->
-      ( model, none )
+websocketHost : String
+websocketHost =
+    "ws://localhost:8080"
 
 
-sendMessage : PlayerCommand -> Effects Action
-sendMessage msg =
-  Encode.encode 0 (encodePlayerCommand msg)
-    |> Signal.send websocketMailbox.address
-    |> Effects.task
-    |> Effects.map (always MessageSent)
+subscriptions : Model -> Sub Msg
+subscriptions model =
+    Sub.batch
+        [ WebSocket.listen websocketHost (decodeString decodeServerMessage >> MessageReceived)
+        , every (200 * millisecond) Tick
+        , Keyboard.ups decodeKey
+        ]
 
 
-websocketMailbox : Mailbox String
-websocketMailbox =
-  Signal.mailbox ""
+update : Msg -> Model -> ( Model, Cmd Msg )
+update msg model =
+    case msg of
+        MessageReceived (Ok (SceneMessage scene)) ->
+            ( { model | scene = Just scene }
+            , Cmd.none
+            )
+
+        MessageReceived (Ok (HelpMessage _)) ->
+            ( model, Cmd.none )
+
+        MessageReceived (Err error) ->
+            ( { model | lastError = Just error }
+            , Cmd.none
+            )
+
+        NoOp ->
+            ( model, Cmd.none )
+
+        Tick _ ->
+            ( model, sendMessage Look )
+
+        PlayerMessage cmd ->
+            ( model, sendMessage cmd )
+
+        MessageSent ->
+            ( model, Cmd.none )
+
+
+sendMessage : PlayerCommand -> Cmd Msg
+sendMessage =
+    encodePlayerCommand
+        >> Encode.encode 0
+        >> WebSocket.send websocketHost

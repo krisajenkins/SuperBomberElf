@@ -1,4 +1,4 @@
-module View.Scene (..) where
+module View.Scene exposing (..)
 
 import Types exposing (..)
 import Svg exposing (..)
@@ -11,111 +11,108 @@ import View.Player exposing (playerIcon)
 
 wallColor : WallType -> String
 wallColor t =
-  case t of
-    Strong ->
-      "teal"
+    case t of
+        Strong ->
+            "teal"
 
-    Weak ->
-      "lightsalmon"
+        Weak ->
+            "lightsalmon"
 
 
 blockSize : Int
 blockSize =
-  35
+    35
 
 
-wallView : Wall -> Svg
+wallView : Wall -> Svg msg
 wallView wall =
-  rect
-    [ x (toString (wall.position.x * blockSize))
-    , y (toString (wall.position.y * blockSize))
-    , width (toString blockSize)
-    , height (toString blockSize)
-    , fill (wallColor wall.wallType)
-    , classList
-        [ ( "wall", True )
-        , ( "alive", wall.alive )
+    rect
+        [ x (toString (wall.position.x * blockSize))
+        , y (toString (wall.position.y * blockSize))
+        , width (toString blockSize)
+        , height (toString blockSize)
+        , fill (wallColor wall.wallType)
+        , classList
+            [ ( "wall", True )
+            , ( "alive", wall.alive )
+            ]
+        , stroke "white"
         ]
-    , stroke "white"
-    ]
-    []
+        []
 
 
 playerColor : Player -> String
 playerColor player =
-  player.id
-    |> (String.slice 0 6)
-    |> ((++) "#")
+    player.id
+        |> (String.slice 0 6)
+        |> ((++) "#")
 
 
-bombView : Bomb -> Svg
+bombView : Bomb -> Svg msg
 bombView bomb =
-  let
-    x =
-      (bomb.position.x * blockSize)
+    let
+        x =
+            (bomb.position.x * blockSize)
 
-    y =
-      (bomb.position.y * blockSize)
+        y =
+            (bomb.position.y * blockSize)
 
-    blastLine toX toY =
-      line
-        [ x1 (toString (x + (blockSize // 2)))
-        , y1 (toString (y + (blockSize // 2)))
-        , x2 (toString (toX + (blockSize // 2)))
-        , y2 (toString (toY + (blockSize // 2)))
-        , stroke "red"
-        , strokeWidth (toString (blockSize // 2))
-        , strokeLinecap "round"
-        ]
-        []
-  in
-    g
-      []
-      ((case bomb.blast of
-          Nothing ->
-            []
+        blastLine toX toY =
+            line
+                [ x1 (toString (x + (blockSize // 2)))
+                , y1 (toString (y + (blockSize // 2)))
+                , x2 (toString (toX + (blockSize // 2)))
+                , y2 (toString (toY + (blockSize // 2)))
+                , stroke "red"
+                , strokeWidth (toString (blockSize // 2))
+                , strokeLinecap "round"
+                ]
+                []
+    in
+        g []
+            ((case bomb.blast of
+                Nothing ->
+                    []
 
-          Just blast ->
-            [ blastLine x (y - (blast.north * blockSize))
-            , blastLine x (y + (blast.south * blockSize))
-            , blastLine (x - (blast.west * blockSize)) y
-            , blastLine (x + (blast.east * blockSize)) y
-            ]
-       )
-        ++ [ bombIcon
-              (toString x)
-              (toString y)
-              (toString blockSize)
-              (toString blockSize)
-           ]
-      )
+                Just blast ->
+                    [ blastLine x (y - (blast.north * blockSize))
+                    , blastLine x (y + (blast.south * blockSize))
+                    , blastLine (x - (blast.west * blockSize)) y
+                    , blastLine (x + (blast.east * blockSize)) y
+                    ]
+             )
+                ++ [ bombIcon (toString x)
+                        (toString y)
+                        (toString blockSize)
+                        (toString blockSize)
+                   ]
+            )
 
 
-playerView : Player -> Svg
+playerView : Player -> Svg msg
 playerView player =
-  let
-    x =
-      (player.position.x * blockSize)
+    let
+        x =
+            (player.position.x * blockSize)
 
-    y =
-      (player.position.y * blockSize)
-  in
-    playerIcon
-      player.alive
-      (playerColor player)
-      (toString x)
-      (toString y)
-      (toString blockSize)
-      (toString blockSize)
+        y =
+            (player.position.y * blockSize)
+    in
+        playerIcon player.alive
+            (playerColor player)
+            (toString x)
+            (toString y)
+            (toString blockSize)
+            (toString blockSize)
 
 
-sceneView : Scene -> Svg
+sceneView : Scene -> Svg msg
 sceneView scene =
-  svg
-    [ width (toString (blockSize * 11))
-    , height (toString (blockSize * 11))
-    ]
-    ((List.map wallView scene.walls)
-      ++ (List.map bombView scene.bombs)
-      ++ (List.map playerView scene.players)
-    )
+    svg
+        [ width (toString (blockSize * 11))
+        , height (toString (blockSize * 11))
+        ]
+        ((List.map wallView scene.walls)
+            ++ (List.map bombView scene.bombs)
+            ++ (List.map playerView scene.players)
+        )

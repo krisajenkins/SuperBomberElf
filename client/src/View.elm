@@ -1,129 +1,123 @@
-module View (..) where
+module View exposing (..)
 
 import Html exposing (..)
 import Html.Attributes exposing (..)
-import Svg.Attributes
 import Svg
+import Svg.Attributes
 import Types exposing (..)
-import Signal exposing (Address)
 import View.Scene exposing (sceneView, playerView)
 
 
-link : List Attribute -> List Html -> Html
+link : List (Attribute msg) -> List (Html msg) -> Html msg
 link =
-  node "link"
+    node "link"
 
 
-root : Address Action -> Model -> Html
-root address model =
-  div
-    [ style
-        [ ( "font-family", "Amarante, sans-serif" )
-        , ( "display", "flex" )
-        , ( "flex-direction", "column" )
-        , ( "align-items", "center" )
+root : Model -> Html Msg
+root model =
+    div
+        [ style
+            [ ( "font-family", "Amarante, sans-serif" )
+            , ( "display", "flex" )
+            , ( "flex-direction", "column" )
+            , ( "align-items", "center" )
+            ]
         ]
-    ]
-    [ link
-        [ href "//fonts.googleapis.com/css?family=Amarante&subset=latin"
-        , rel "stylesheet"
-        , type' "text/css"
+        [ link
+            [ href "//fonts.googleapis.com/css?family=Amarante&subset=latin"
+            , rel "stylesheet"
+            , type_ "text/css"
+            ]
+            []
+        , link
+            [ href "style.css"
+            , rel "stylesheet"
+            , type_ "text/css"
+            ]
+            []
+        , h1 [ style [ ( "font-size", "3rem" ) ] ]
+            [ text "Super Bomber Elf" ]
+        , case model.scene of
+            Just scene ->
+                sceneLoadedView scene
+
+            Nothing ->
+                i [] [ text "Waiting for data..." ]
         ]
-        []
-    , link
-        [ href "style.css"
-        , rel "stylesheet"
-        , type' "text/css"
-        ]
-        []
-    , h1
-        [ style [ ( "font-size", "3rem" ) ] ]
-        [ text "Super Bomber Elf" ]
-    , case model.scene of
-        Just scene ->
-          sceneLoadedView scene
-
-        Nothing ->
-          i [] [ text "Waiting for data..." ]
-    ]
 
 
-sceneLoadedView : Scene -> Html
+sceneLoadedView : Scene -> Html Msg
 sceneLoadedView scene =
-  div
-    [ style [ ( "display", "flex" ) ] ]
-    [ div [ style [ ( "width", "40vw" ) ] ] [ playerGuideView scene ]
-    , div [ style [ ( "width", "40vw" ) ] ] [ sceneView scene ]
-    ]
+    div [ style [ ( "display", "flex" ) ] ]
+        [ div [ style [ ( "width", "40vw" ) ] ] [ playerGuideView scene ]
+        , div [ style [ ( "width", "40vw" ) ] ] [ sceneView scene ]
+        ]
 
 
 playerSort : Player -> Player -> Order
 playerSort a b =
-  case ( a.name, b.name ) of
-    ( Nothing, Nothing ) ->
-      compare a.score b.score
+    case ( a.name, b.name ) of
+        ( Nothing, Nothing ) ->
+            compare a.score b.score
 
-    ( Just _, Nothing ) ->
-      LT
+        ( Just _, Nothing ) ->
+            LT
 
-    ( Nothing, Just _ ) ->
-      GT
+        ( Nothing, Just _ ) ->
+            GT
 
-    ( Just aName, Just bName ) ->
-      compare a.score b.score
+        ( Just aName, Just bName ) ->
+            compare a.score b.score
 
 
-playerGuideView : Scene -> Html
+playerGuideView : Scene -> Html Msg
 playerGuideView scene =
-  div
-    []
-    (List.map
-      playerBadgeView
-      (List.sortWith playerSort scene.players)
-    )
+    div []
+        (List.map playerBadgeView
+            (List.sortWith playerSort scene.players)
+        )
 
 
-playerBadgeView : Player -> Html
+playerBadgeView : Player -> Html Msg
 playerBadgeView player =
-  div
-    [ style
-        [ ( "display", "flex" )
-        , ( "align-items", "center" )
-        ]
-    ]
-    [ span
+    div
         [ style
-            [ ( "font-size", "1.3rem" )
-            , ( "margin", "0.5rem" )
+            [ ( "display", "flex" )
+            , ( "align-items", "center" )
             ]
         ]
-        [ text (toString player.score) ]
-    , Svg.svg
-        [ Svg.Attributes.width "40"
-        , Svg.Attributes.height "40"
-        , Svg.Attributes.viewBox "0 0 50 50"
-        , Svg.Attributes.preserveAspectRatio "xMaxYMax"
-        ]
-        [ playerView { player | position = Position 0 0 } ]
-    , span
-        [ style
-            [ ( "font-size", "1.3rem" )
-            , ( "margin", "0.5rem" )
+        [ span
+            [ style
+                [ ( "font-size", "1.3rem" )
+                , ( "margin", "0.5rem" )
+                ]
             ]
+            [ text (toString player.score) ]
+        , Svg.svg
+            [ Svg.Attributes.width "40"
+            , Svg.Attributes.height "40"
+            , Svg.Attributes.viewBox "0 0 50 50"
+            , Svg.Attributes.preserveAspectRatio "xMaxYMax"
+            ]
+            [ playerView { player | position = Position 0 0 } ]
+        , span
+            [ style
+                [ ( "font-size", "1.3rem" )
+                , ( "margin", "0.5rem" )
+                ]
+            ]
+            [ text (Maybe.withDefault player.id player.name) ]
         ]
-        [ text (Maybe.withDefault player.id player.name) ]
-    ]
 
 
-debuggingView : Model -> Html
+debuggingView : Model -> Html Msg
 debuggingView model =
-  case model.scene of
-    Just scene ->
-      div
-        []
-        [ div [] [ code [] [ text (toString scene.bombs) ] ]
-        , div [] [ code [] [ text (toString scene.players) ] ]
-        ]
+    case model.scene of
+        Just scene ->
+            div []
+                [ div [] [ code [] [ text (toString scene.bombs) ] ]
+                , div [] [ code [] [ text (toString scene.players) ] ]
+                ]
 
-    _ ->
-      span [] []
+        _ ->
+            span [] []

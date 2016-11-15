@@ -1,3 +1,6 @@
+#!/usr/bin/env stack
+-- stack --install-ghc runghc --package shake
+{- | Compile with `stack ghc -- Shake.hs -o smake` -}
 module Main where
 
 import           Development.Shake
