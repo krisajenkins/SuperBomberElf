@@ -137,7 +137,7 @@ clientJoins server conn =
        atomically . runStateSTM server $ addConnection conn
      printf "JOINED: %s\n" (show clientId)
      Just clientConnection <-
-       pure $ (view (clients . at clientId) newServerState)
+       pure $ view (clients . at clientId) newServerState
      WS.send (view connection clientConnection)
              (toMessage helpMessage)
      sendSceneToClient (view scene newServerState)

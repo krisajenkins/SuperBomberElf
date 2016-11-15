@@ -18,7 +18,8 @@ library
   exposed-modules:     Lib
                      , Config
                      , Engine
-                     , Events
+                     , EventSystem
+                     , EventRules
                      , Types
                      , Levels
                      , Rest
@@ -70,7 +71,6 @@ executable bomberman
                      , time
                      , websockets
   default-language:    Haskell2010
-  default-extensions: OverloadedStrings
 
 test-suite bomberman-test
   type:                exitcode-stdio-1.0
@@ -78,7 +78,8 @@ test-suite bomberman-test
   main-is:             Spec.hs
   other-modules:       TypesSpec
                      , LibSpec
-                     , EventsSpec
+                     , EventRulesSpec
+                     , EventSystemSpec
   build-depends:       base
                      , bomberman
                      , aeson
