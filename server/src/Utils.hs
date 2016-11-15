@@ -16,11 +16,13 @@ singleton x = [x]
 addTime :: Int -> UTCTime -> UTCTime
 addTime d = addUTCTime (fromIntegral d)
 
-toMessage :: ToJSON a => a -> WS.Message
+toMessage
+  :: ToJSON a
+  => a -> WS.Message
 toMessage = WS.DataMessage . WS.Text . encode
 
 runStateSTM :: TVar a -> State a b -> STM (b, a)
-runStateSTM var f =
-  do (v,new) <- runState f <$> readTVar var
-     writeTVar var new
-     return (v,new)
+runStateSTM var f = do
+  (v, new) <- runState f <$> readTVar var
+  writeTVar var new
+  return (v, new)

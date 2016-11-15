@@ -2,7 +2,9 @@
 {-# LANGUAGE TypeFamilies  #-}
 {-# LANGUAGE TypeOperators #-}
 
-module Rest (application) where
+module Rest
+  ( application
+  ) where
 
 import           Network.Wai as Wai
 import           Servant
