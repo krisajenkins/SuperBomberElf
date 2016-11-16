@@ -18,13 +18,13 @@ library
   exposed-modules:     Lib
                      , Config
                      , Engine
-                     , EventSystem
-                     , EventRules
+                     , Events
                      , Types
                      , Levels
                      , Rest
                      , Render
                      , Utils
+  other-modules:       AesonUtils
   build-depends:       aeson
                      , async
                      , base >= 4.7 && < 5
@@ -79,8 +79,7 @@ test-suite bomberman-test
   main-is:             Spec.hs
   other-modules:       TypesSpec
                      , LibSpec
-                     , EventRulesSpec
-                     , EventSystemSpec
+                     , EventsSpec
   build-depends:       base
                      , bomberman
                      , aeson
