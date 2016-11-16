@@ -90,7 +90,7 @@ genStartPosition
   => m Position
 genStartPosition = do
   n <- getRandomR (0, length validStartPositions - 1)
-  return $ validStartPositions !! n
+  pure $ validStartPositions !! n
 
 createPlayer
   :: MonadRandom m
@@ -98,7 +98,7 @@ createPlayer
 createPlayer = do
   uuid <- getRandom
   startPosition <- genStartPosition
-  return
+  pure
     ( ClientId uuid
     , Player
       { _playerName = T.pack $ show uuid
@@ -147,7 +147,7 @@ addConnection conn = do
   (newClientId, newPlayer) <- zoom generator (state (runRand createPlayer))
   assign (scene . players . at newClientId) (Just newPlayer)
   assign (clients . at newClientId) (Just (ClientConnection conn))
-  return newClientId
+  pure newClientId
 
 removeConnection
   :: Monad m
@@ -166,7 +166,7 @@ clientJoins server conn = do
   Just clientConnection <- pure $ view (clients . at clientId) newServerState
   send clientConnection helpMessage
   send clientConnection (views scene displayScene newServerState)
-  return clientId
+  pure clientId
 
 clientLeaves ::
    (MonadIO m, MonadLogger m)
