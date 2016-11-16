@@ -112,7 +112,7 @@ handleCommandFromClient
   => TVar Server -> ClientId -> m ()
 handleCommandFromClient server clientId = do
   serverState <- liftIO . atomically $ readTVar server
-  (Just clientConnection) <- pure $ view (clients . at clientId) serverState
+  let Just clientConnection = view (clients . at clientId) serverState
   dataMessage <- receive clientConnection
   handleMessage server clientId dataMessage
 
@@ -123,7 +123,7 @@ handleMessage _ _ (WS.Text "") = pure ()
 handleMessage _ _ (WS.Binary _) = pure ()
 handleMessage server clientId (WS.Text rawMsg) = do
   serverState <- liftIO . atomically $ readTVar server
-  mClientConnection <- pure $ view (clients . at clientId) serverState
+  let mClientConnection = view (clients . at clientId) serverState
   case mClientConnection of
     Nothing -> logErrorN $ F.sformat ("CONNECTION NOT FOUND: " % F.shown) clientId
     Just clientConnection ->
@@ -163,7 +163,7 @@ clientJoins server conn = do
   (clientId, newServerState) <-
     liftIO . atomically . runStateSTM server $ addConnection conn
   logInfoN $ F.sformat ("JOINED: " % F.shown) clientId
-  Just clientConnection <- pure $ view (clients . at clientId) newServerState
+  let Just clientConnection = view (clients . at clientId) newServerState
   send clientConnection helpMessage
   send clientConnection (views scene displayScene newServerState)
   pure clientId
