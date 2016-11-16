@@ -67,10 +67,15 @@ instance MonadSTM IO where
   atomically2 = atomically
 
 ------------------------------------------------------------
-sendToClient
-  :: (ToJSON a,MonadIO m)
+receive
+  :: MonadIO m
+  => ClientConnection -> m WS.DataMessage
+receive = liftIO . WS.receiveDataMessage . view connection
+
+send
+  :: (ToJSON a, MonadIO m)
   => ClientConnection -> a -> m ()
-sendToClient clientConnection value =
+send clientConnection value =
   liftIO $ WS.send (view connection clientConnection) (toMessage value)
 
 ------------------------------------------------------------
@@ -108,8 +113,7 @@ handleCommandFromClient
 handleCommandFromClient server clientId = do
   serverState <- liftIO . atomically $ readTVar server
   (Just clientConnection) <- pure $ view (clients . at clientId) serverState
-  dataMessage <-
-    liftIO $ WS.receiveDataMessage (view connection clientConnection)
+  dataMessage <- receive clientConnection
   handleMessage server clientId dataMessage
 
 handleMessage
@@ -121,22 +125,18 @@ handleMessage server clientId (WS.Text rawMsg) = do
   serverState <- liftIO . atomically $ readTVar server
   mClientConnection <- pure $ view (clients . at clientId) serverState
   case mClientConnection of
-    Nothing ->
-      logErrorN $
-      F.sformat ("SERVER ERROR - CONNECTION NOT FOUND: " % F.shown) clientId
+    Nothing -> logErrorN $ F.sformat ("CONNECTION NOT FOUND: " % F.shown) clientId
     Just clientConnection ->
       case eitherDecode rawMsg of
         Left e -> do
-          logErrorN $ F.sformat ("ERR " % F.shown % ": " % F.shown) clientId e
-          sendToClient clientConnection helpMessage
+          logErrorN $ F.sformat (F.shown % " - " % F.shown) clientId e
+          send clientConnection helpMessage
         Right cmd -> do
           newServerState <-
             liftIO . atomically $
             do processGameEvent server (FromPlayer clientId cmd)
                readTVar server
-          sendToClient
-              clientConnection
-              (views scene displayScene newServerState)
+          send clientConnection (views scene displayScene newServerState)
           liftIO $ threadPause playerThrottleDelay
 
 ------------------------------------------------------------
@@ -164,8 +164,8 @@ clientJoins server conn = do
     liftIO . atomically . runStateSTM server $ addConnection conn
   logInfoN $ F.sformat ("JOINED: " % F.shown) clientId
   Just clientConnection <- pure $ view (clients . at clientId) newServerState
-  sendToClient clientConnection helpMessage
-  sendSceneToClient clientConnection (view scene newServerState)
+  send clientConnection helpMessage
+  send clientConnection (views scene displayScene newServerState)
   return clientId
 
 clientLeaves ::
@@ -176,9 +176,9 @@ clientLeaves server clientId = do
   logInfoN $ F.sformat ("DISCONNECTED: " % F.shown) clientId
 
 clientLoop
-  :: (MonadIO m,MonadLogger m)
+  :: (MonadIO m, MonadLogger m)
   => TVar Server -> ClientId -> m ()
-clientLoop server = forever .  handleCommandFromClient server
+clientLoop server = forever . handleCommandFromClient server
 
 helpMessage :: Value
 helpMessage =
@@ -188,11 +188,6 @@ helpMessage =
       String
         "Messages must be valid JSON, and plain strings aren't allowed as top-level JSON elements, so everything must be wrapped in a message object. Blame Doug Crockford, not me!"
     ]
-
-sendSceneToClient
-  :: MonadIO m
-  => ClientConnection -> Scene -> m ()
-sendSceneToClient clientConnection = sendToClient clientConnection . displayScene
 
 ------------------------------------------------------------
 processGameEvent :: TVar Server -> GameEvent -> STM ()
