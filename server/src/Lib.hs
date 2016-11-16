@@ -18,6 +18,7 @@ import           Control.Concurrent.STM
 import           Control.Exception
 import           Control.Lens                   hiding ((.=))
 import           Control.Monad
+import           Control.Monad.Logger
 import           Control.Monad.State
 import           Data.Aeson
 import qualified Data.ByteString.Char8          as BS
@@ -35,7 +36,8 @@ import           Network.Wai.Handler.WebSockets
 import qualified Network.WebSockets             as WS
 import           Render
 import qualified Rest
-import           System.Random
+import           System.Random                  (Random, StdGen, getStdGen,
+                                                 random, randomR)
 import qualified System.Remote.Monitoring       as EKG
 import           Types
 import           Utils
@@ -55,44 +57,36 @@ data Server = Server
 makeLenses ''Server
 
 ------------------------------------------------------------
-readRandom
-  :: (Random a, Monad m)
-  => StateT Server m a
-readRandom = do
-  (r, g') <- random <$> use generator
-  assign generator g'
-  return r
 
-readRandomR
-  :: (Random a, Monad m)
-  => (a, a) -> StateT Server m a
-readRandomR range = do
-  (r, g') <- randomR range <$> use generator
-  assign generator g'
-  return r
+genUUID
+  :: Monad m
+  => StateT StdGen m UUID
+genUUID = state random
 
-genUUID :: State Server UUID
-genUUID = readRandom
+genRange
+  :: (Random a, Monad m)
+  => (a, a) -> StateT StdGen m a
+genRange = state . randomR
 
 ------------------------------------------------------------
-genStartPosition :: State Server Position
+
+genStartPosition :: Monad m => StateT StdGen m Position
 genStartPosition = do
-  n <- readRandomR (0, length validStartPositions - 1)
+  n <- genRange (0, length validStartPositions - 1)
   return $ validStartPositions !! n
 
-createPlayer :: State Server (ClientId, Player)
+createPlayer :: Monad m => StateT StdGen m (ClientId, Player)
 createPlayer = do
   uuid <- genUUID
   startPosition <- genStartPosition
-  return $
-    (,)
-      (ClientId uuid)
-      Player
+  return
+    ( ClientId uuid
+    , Player
       { _playerName = T.pack $ show uuid
       , _playerDiedAt = Nothing
       , _playerPosition = startPosition
       , _playerScore = 0
-      }
+      })
 
 handleCommandFromClient :: TVar Server -> ClientId -> IO ()
 handleCommandFromClient server clientId = do
@@ -133,7 +127,7 @@ acceptClientConnection server pendingConnection =
 
 addConnection :: WS.Connection -> State Server ClientId
 addConnection conn = do
-  (newClientId, newPlayer) <- createPlayer
+  (newClientId, newPlayer) <- zoom generator createPlayer
   assign (scene . players . at newClientId) (Just newPlayer)
   assign (clients . at newClientId) (Just (ClientConnection conn))
   return newClientId
