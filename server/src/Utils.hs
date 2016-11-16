@@ -27,4 +27,4 @@ runStateSTM var f = do
   value <- readTVar var
   let (v, new) = runIdentity $ runStateT f value
   writeTVar var new
-  return (v, new)
+  pure (v, new)

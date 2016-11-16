@@ -14,9 +14,9 @@ instance Arbitrary Server where
   arbitrary =
     do seed <- arbitrary
        scene <- arbitrary
-       return Server {_clients = Map.empty
-                     ,_scene = scene
-                     ,_generator = mkStdGen seed}
+       pure Server {_clients = Map.empty
+                   ,_scene = scene
+                   ,_generator = mkStdGen seed}
 
 spec :: Spec
 spec = pure ()

@@ -23,10 +23,11 @@ instance Arbitrary PlayerCommand where
 instance Arbitrary Scene where
   arbitrary =
     do t <- arbitrary
-       return Scene {_players = Map.empty
-                    ,_walls = []
-                    ,_bombs = []
-                    ,_clock = t}
+       pure Scene {_players = Map.empty
+                  ,_walls = []
+                  ,_bombs = []
+                  ,_clock = t
+                  ,_serverEndpoint = Nothing}
 
 spec :: Spec
 spec =

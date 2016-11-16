@@ -51,7 +51,7 @@ validStartPositions :: [Position]
 validStartPositions = do
   a <- [1, 9]
   b <- [1, 9]
-  return (Position a b)
+  pure (Position a b)
 
 initialScene :: UTCTime -> Scene
 initialScene _clock =
