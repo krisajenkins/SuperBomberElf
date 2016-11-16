@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 module Client where
 
 import           Config
@@ -5,14 +6,11 @@ import           Control.Concurrent
 import           Control.Lens
 import           Data.Time
 import qualified Network.WebSockets as WS
-import           Text.Printf
 import           Utils
 
 websocketHandler :: Int -> WS.ClientApp ()
 websocketHandler n conn = do
   _ <- WS.receiveDataMessage conn
-  printf "(%2d) RECD!\n" n
-  --threadPause (1 :: NominalDiffTime)
   websocketHandler n conn
 
 runWebsocketClient :: Config -> IO ()

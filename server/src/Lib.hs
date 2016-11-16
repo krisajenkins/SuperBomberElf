@@ -27,6 +27,8 @@ import qualified Data.Text                      as T
 import           Data.Time
 import           Data.UUID
 import           Engine
+import           Formatting                     ((%))
+import qualified Formatting                     as F
 import           Levels
 import qualified Network.Wai.Handler.Warp       as Warp
 import           Network.Wai.Handler.WebSockets
@@ -35,7 +37,6 @@ import           Render
 import qualified Rest
 import           System.Random
 import qualified System.Remote.Monitoring       as EKG
-import           Text.Printf
 import           Types
 import           Utils
 
@@ -108,11 +109,11 @@ handleMessage server clientId (WS.Text rawMsg) = do
   mClientConnection <- pure $ view (clients . at clientId) serverState
   case mClientConnection of
     Nothing ->
-      printf "SERVER ERROR - CONNECTION NOT FOUND: %s\n" (show clientId)
+      F.fprint ("SERVER ERROR - CONNECTION NOT FOUND: " % F.shown % "\n") clientId
     Just clientConnection ->
       case eitherDecode rawMsg of
         Left e -> do
-          printf "ERR %s: %s\n" (show clientId) (show e)
+          F.fprint ("ERR " % F.shown % ": " % F.shown % "\n") clientId e
           WS.send (view connection clientConnection) (toMessage helpMessage)
         Right cmd -> do
           newServerState <-
@@ -146,7 +147,7 @@ clientJoins :: TVar Server -> WS.Connection -> IO ClientId
 clientJoins server conn = do
   (clientId, newServerState) <-
     atomically . runStateSTM server $ addConnection conn
-  printf "JOINED: %s\n" (show clientId)
+  F.fprint ("JOINED: " % F.shown % "\n") clientId
   Just clientConnection <- pure $ view (clients . at clientId) newServerState
   WS.send (view connection clientConnection) (toMessage helpMessage)
   sendSceneToClient (view scene newServerState) clientConnection
@@ -155,7 +156,7 @@ clientJoins server conn = do
 clientLeaves :: TVar Server -> ClientId -> IO ()
 clientLeaves server clientId = do
   atomically . modifyTVar server . execState $ removeConnection clientId
-  printf "DISCONNECTED: %s\n" (show clientId)
+  F.fprint ("DISCONNECTED: " % F.shown % "\n") clientId
 
 clientLoop :: TVar Server -> ClientId -> IO ()
 clientLoop server clientId = forever $ handleCommandFromClient server clientId
@@ -204,24 +205,24 @@ initServer = do
 
 startEkg :: BindTo -> IO EKG.Server
 startEkg bindTo = do
-  printf "Monitoring on port: %s\n" (show bindTo)
+  F.fprint ("Monitoring on port: " % F.shown % "\n") bindTo
   EKG.forkServer (BS.pack (view address bindTo)) (view port bindTo)
 
 runGameServer :: Config -> IO ()
 runGameServer config = do
   _ <- startEkg (view ekgBindsTo config)
   server <- initServer
-  printf "Starting game loop thread.\n"
+  F.fprint "Starting game loop thread.\n"
   _ <- forkIO $ gameLoop server
   let p = view (playersBindTo . port) config
-  printf "Starting webserver on: %d\n" p
+  _ <- F.fprint ("Starting webserver on: " % F.int % "\n") p
   Warp.run
     p
     (websocketsOr
        WS.defaultConnectionOptions
        (acceptClientConnection server)
        (Rest.application (view staticDir config)))
-  printf "Finished.\n"
+  F.fprint "Finished.\n"
 
 run :: IO ()
 run = loadConfig >>= either print runGameServer

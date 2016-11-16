@@ -37,6 +37,7 @@ library
                      , network
                      , random
                      , safe
+                     , formatting
                      , servant-server
                      , stm
                      , text
