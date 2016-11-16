@@ -34,7 +34,9 @@ library
                      , ekg
                      , lens
                      , mtl
-                     , network
+                     , monad-logger
+                     , resourcet
+                     , MonadRandom
                      , random
                      , safe
                      , formatting
@@ -61,6 +63,7 @@ executable bomberman
                      , aeson
                      , async
                      , bytestring
+                     , monad-logger
                      , containers
                      , random
                      , uuid

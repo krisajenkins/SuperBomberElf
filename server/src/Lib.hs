@@ -1,3 +1,5 @@
+{-# LANGUAGE FlexibleContexts    #-}
+{-# LANGUAGE FlexibleInstances   #-}
 {-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE RecordWildCards     #-}
@@ -15,11 +17,13 @@ module Lib
 import           Config
 import           Control.Concurrent
 import           Control.Concurrent.STM
-import           Control.Exception
 import           Control.Lens                   hiding ((.=))
 import           Control.Monad
 import           Control.Monad.Logger
+import           Control.Monad.Random           hiding (genRange)
+import           Control.Monad.Reader
 import           Control.Monad.State
+import           Control.Monad.Trans.Resource
 import           Data.Aeson
 import qualified Data.ByteString.Char8          as BS
 import           Data.Map                       (Map)
@@ -36,8 +40,6 @@ import           Network.Wai.Handler.WebSockets
 import qualified Network.WebSockets             as WS
 import           Render
 import qualified Rest
-import           System.Random                  (Random, StdGen, getStdGen,
-                                                 random, randomR)
 import qualified System.Remote.Monitoring       as EKG
 import           Types
 import           Utils
@@ -57,27 +59,39 @@ data Server = Server
 makeLenses ''Server
 
 ------------------------------------------------------------
+class Monad m =>
+      MonadSTM m  where
+  atomically2 :: STM a -> m a
 
+instance MonadSTM IO where
+  atomically2 = atomically
+
+------------------------------------------------------------
+sendToClient
+  :: (ToJSON a,MonadIO m)
+  => ClientConnection -> a -> m ()
+sendToClient clientConnection value =
+  liftIO $ WS.send (view connection clientConnection) (toMessage value)
+
+------------------------------------------------------------
 genUUID
   :: Monad m
   => StateT StdGen m UUID
 genUUID = state random
 
-genRange
-  :: (Random a, Monad m)
-  => (a, a) -> StateT StdGen m a
-genRange = state . randomR
-
 ------------------------------------------------------------
-
-genStartPosition :: Monad m => StateT StdGen m Position
+genStartPosition
+  :: MonadRandom m
+  => m Position
 genStartPosition = do
-  n <- genRange (0, length validStartPositions - 1)
+  n <- getRandomR (0, length validStartPositions - 1)
   return $ validStartPositions !! n
 
-createPlayer :: Monad m => StateT StdGen m (ClientId, Player)
+createPlayer
+  :: MonadRandom m
+  => m (ClientId, Player)
 createPlayer = do
-  uuid <- genUUID
+  uuid <- getRandom
   startPosition <- genStartPosition
   return
     ( ClientId uuid
@@ -88,72 +102,83 @@ createPlayer = do
       , _playerScore = 0
       })
 
-handleCommandFromClient :: TVar Server -> ClientId -> IO ()
+handleCommandFromClient
+  :: (MonadIO m, MonadLogger m)
+  => TVar Server -> ClientId -> m ()
 handleCommandFromClient server clientId = do
-  serverState <- atomically $ readTVar server
+  serverState <- liftIO . atomically $ readTVar server
   (Just clientConnection) <- pure $ view (clients . at clientId) serverState
-  dataMessage <- WS.receiveDataMessage (view connection clientConnection)
+  dataMessage <-
+    liftIO $ WS.receiveDataMessage (view connection clientConnection)
   handleMessage server clientId dataMessage
 
-handleMessage :: TVar Server -> ClientId -> WS.DataMessage -> IO ()
+handleMessage
+  :: (MonadIO m, MonadLogger m)
+  => TVar Server -> ClientId -> WS.DataMessage -> m ()
 handleMessage _ _ (WS.Text "") = pure ()
 handleMessage _ _ (WS.Binary _) = pure ()
 handleMessage server clientId (WS.Text rawMsg) = do
-  serverState <- atomically $ readTVar server
+  serverState <- liftIO . atomically $ readTVar server
   mClientConnection <- pure $ view (clients . at clientId) serverState
   case mClientConnection of
     Nothing ->
-      F.fprint ("SERVER ERROR - CONNECTION NOT FOUND: " % F.shown % "\n") clientId
+      logErrorN $
+      F.sformat ("SERVER ERROR - CONNECTION NOT FOUND: " % F.shown) clientId
     Just clientConnection ->
       case eitherDecode rawMsg of
         Left e -> do
-          F.fprint ("ERR " % F.shown % ": " % F.shown % "\n") clientId e
-          WS.send (view connection clientConnection) (toMessage helpMessage)
+          logErrorN $ F.sformat ("ERR " % F.shown % ": " % F.shown) clientId e
+          sendToClient clientConnection helpMessage
         Right cmd -> do
           newServerState <-
-            atomically $
+            liftIO . atomically $
             do processGameEvent server (FromPlayer clientId cmd)
                readTVar server
-          sendSceneToClient (view scene newServerState) clientConnection
-          threadPause playerThrottleDelay
+          sendToClient
+              clientConnection
+              (views scene displayScene newServerState)
+          liftIO $ threadPause playerThrottleDelay
 
 ------------------------------------------------------------
-acceptClientConnection :: TVar Server -> WS.ServerApp
-acceptClientConnection server pendingConnection =
-  bracket
-    (WS.acceptRequest pendingConnection >>= clientJoins server)
-    (clientLeaves server)
-    (clientLoop server)
-
-addConnection :: WS.Connection -> State Server ClientId
+addConnection
+  :: Monad m
+  => WS.Connection -> StateT Server m ClientId
 addConnection conn = do
-  (newClientId, newPlayer) <- zoom generator createPlayer
+  (newClientId, newPlayer) <- zoom generator (state (runRand createPlayer))
   assign (scene . players . at newClientId) (Just newPlayer)
   assign (clients . at newClientId) (Just (ClientConnection conn))
   return newClientId
 
-removeConnection :: ClientId -> State Server ()
+removeConnection
+  :: Monad m
+  => ClientId -> StateT Server m ()
 removeConnection clientId = do
   assign (scene . players . at clientId) Nothing
   assign (clients . at clientId) Nothing
 
-clientJoins :: TVar Server -> WS.Connection -> IO ClientId
+clientJoins
+  :: (MonadIO m, MonadLogger m)
+  => TVar Server -> WS.Connection -> m ClientId
 clientJoins server conn = do
   (clientId, newServerState) <-
-    atomically . runStateSTM server $ addConnection conn
-  F.fprint ("JOINED: " % F.shown % "\n") clientId
+    liftIO . atomically . runStateSTM server $ addConnection conn
+  logInfoN $ F.sformat ("JOINED: " % F.shown) clientId
   Just clientConnection <- pure $ view (clients . at clientId) newServerState
-  WS.send (view connection clientConnection) (toMessage helpMessage)
-  sendSceneToClient (view scene newServerState) clientConnection
+  sendToClient clientConnection helpMessage
+  sendSceneToClient clientConnection (view scene newServerState)
   return clientId
 
-clientLeaves :: TVar Server -> ClientId -> IO ()
+clientLeaves ::
+   (MonadIO m, MonadLogger m)
+  => TVar Server -> ClientId -> m ()
 clientLeaves server clientId = do
-  atomically . modifyTVar server . execState $ removeConnection clientId
-  F.fprint ("DISCONNECTED: " % F.shown % "\n") clientId
+  liftIO . atomically . modifyTVar server . execState $ removeConnection clientId
+  logInfoN $ F.sformat ("DISCONNECTED: " % F.shown) clientId
 
-clientLoop :: TVar Server -> ClientId -> IO ()
-clientLoop server clientId = forever $ handleCommandFromClient server clientId
+clientLoop
+  :: (MonadIO m,MonadLogger m)
+  => TVar Server -> ClientId -> m ()
+clientLoop server = forever .  handleCommandFromClient server
 
 helpMessage :: Value
 helpMessage =
@@ -164,11 +189,10 @@ helpMessage =
         "Messages must be valid JSON, and plain strings aren't allowed as top-level JSON elements, so everything must be wrapped in a message object. Blame Doug Crockford, not me!"
     ]
 
-sendSceneToClient :: Scene -> ClientConnection -> IO ()
-sendSceneToClient currentScene clientConnection =
-  WS.send
-    (view connection clientConnection)
-    (WS.DataMessage . WS.Text . encode . displayScene $ currentScene)
+sendSceneToClient
+  :: MonadIO m
+  => ClientConnection -> Scene -> m ()
+sendSceneToClient clientConnection = sendToClient clientConnection . displayScene
 
 ------------------------------------------------------------
 processGameEvent :: TVar Server -> GameEvent -> STM ()
@@ -178,12 +202,24 @@ processGameEvent server event =
 ------------------------------------------------------------
 -- TODO The frame rate is actually frameDelay *plus* the time it takes
 --  to get the tick processed. Not ideal.
-gameLoop :: TVar Server -> IO ()
-gameLoop server =
-  forever $
-  do tick <- Tick <$> getCurrentTime
-     _ <- atomically $ processGameEvent server tick
-     threadPause frameDelay
+gameStep
+  :: MonadIO m
+  => TVar Server -> m ()
+gameStep server = do
+  tick <- liftIO $ Tick <$> getCurrentTime
+  _ <- liftIO . atomically $ processGameEvent server tick
+  liftIO $ threadPause frameDelay
+
+------------------------------------------------------------
+acceptClientConnection
+  :: (MonadResource m, MonadLogger m)
+  => TVar Server -> WS.PendingConnection -> m ()
+acceptClientConnection server pendingConnection = do
+  (_releaseKey, resource) <-
+    allocate
+      (WS.acceptRequest pendingConnection >>= runStdoutLoggingT . clientJoins server)
+      (runStdoutLoggingT . clientLeaves server)
+  clientLoop server resource
 
 ------------------------------------------------------------
 initServer :: IO (TVar Server)
@@ -197,26 +233,34 @@ initServer = do
       { ..
       }
 
-startEkg :: BindTo -> IO EKG.Server
+startEkg
+  :: (MonadIO m, MonadLogger m)
+  => BindTo -> m EKG.Server
 startEkg bindTo = do
-  F.fprint ("Monitoring on port: " % F.shown % "\n") bindTo
-  EKG.forkServer (BS.pack (view address bindTo)) (view port bindTo)
+  logInfoN $ F.sformat ("Monitoring on port: " % F.shown) bindTo
+  liftIO $ EKG.forkServer (BS.pack (view address bindTo)) (view port bindTo)
 
-runGameServer :: Config -> IO ()
-runGameServer config = do
-  _ <- startEkg (view ekgBindsTo config)
-  server <- initServer
-  F.fprint "Starting game loop thread.\n"
-  _ <- forkIO $ gameLoop server
-  let p = view (playersBindTo . port) config
-  _ <- F.fprint ("Starting webserver on: " % F.int % "\n") p
-  Warp.run
-    p
-    (websocketsOr
-       WS.defaultConnectionOptions
-       (acceptClientConnection server)
-       (Rest.application (view staticDir config)))
-  F.fprint "Finished.\n"
+runGameServer
+  :: (MonadIO m, MonadLogger m, MonadReader Config m)
+  => m ()
+runGameServer = do
+  ekgPort <- view ekgBindsTo
+  websocketPort <- view (playersBindTo . port)
+  static <- view staticDir
+  logInfoN "Starting EKG"
+  _ <- startEkg ekgPort
+  server <- liftIO initServer
+  logInfoN "Starting game loop thread."
+  _ <- liftIO . forkIO . forever $ gameStep server
+  logInfoN $ F.sformat ("Starting webserver on: " % F.int) websocketPort
+  liftIO $
+    Warp.run
+      websocketPort
+      (websocketsOr
+         WS.defaultConnectionOptions
+         (runStdoutLoggingT . runResourceT . acceptClientConnection server)
+         (Rest.application static))
+  logInfoN "Finished."
 
 run :: IO ()
-run = loadConfig >>= either print runGameServer
+run = loadConfig >>= either print (runStdoutLoggingT . runReaderT runGameServer)

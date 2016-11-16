@@ -4,6 +4,7 @@ import           Control.Concurrent
 import           Control.Concurrent.STM
 import           Control.Monad.State
 import           Data.Aeson
+import           Data.Functor.Identity
 import           Data.Time
 import qualified Network.WebSockets     as WS
 
@@ -21,8 +22,9 @@ toMessage
   => a -> WS.Message
 toMessage = WS.DataMessage . WS.Text . encode
 
-runStateSTM :: TVar a -> State a b -> STM (b, a)
+runStateSTM :: TVar a -> StateT a Identity b -> STM (b, a)
 runStateSTM var f = do
-  (v, new) <- runState f <$> readTVar var
+  value <- readTVar var
+  let (v, new) = runIdentity $ runStateT f value
   writeTVar var new
   return (v, new)
