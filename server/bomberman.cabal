@@ -18,7 +18,6 @@ library
   exposed-modules:     Lib
                      , Config
                      , Engine
-                     , Events
                      , Types
                      , Levels
                      , Rest
@@ -82,7 +81,6 @@ test-suite bomberman-test
   main-is:             Spec.hs
   other-modules:       TypesSpec
                      , LibSpec
-                     , EventsSpec
   build-depends:       base
                      , bomberman
                      , aeson
