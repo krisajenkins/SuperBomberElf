@@ -8,10 +8,7 @@
 
 module Lib
   ( run
-  , genUUID
-  , createPlayer
   , Server(..)
-  , generator
   ) where
 
 import           Config
@@ -30,7 +27,6 @@ import           Data.Map                       (Map)
 import qualified Data.Map                       as Map
 import qualified Data.Text                      as T
 import           Data.Time
-import           Data.UUID
 import           Engine
 import           Formatting                     ((%))
 import qualified Formatting                     as F
@@ -51,9 +47,8 @@ data ClientConnection = ClientConnection
 makeLenses ''ClientConnection
 
 data Server = Server
-  { _clients   :: Map ClientId ClientConnection
-  , _scene     :: Scene
-  , _generator :: StdGen
+  { _clients :: Map ClientId ClientConnection
+  , _scene   :: Scene
   }
 
 makeLenses ''Server
@@ -61,28 +56,81 @@ makeLenses ''Server
 ------------------------------------------------------------
 class Monad m =>
       MonadSTM m  where
-  atomically2 :: STM a -> m a
+  atomicallyM :: STM a -> m a
 
 instance MonadSTM IO where
-  atomically2 = atomically
+  atomicallyM = atomically
+
+instance MonadSTM m =>
+         MonadSTM (ResourceT m) where
+  atomicallyM = lift . atomicallyM
+
+instance MonadSTM m =>
+         MonadSTM (ReaderT env m) where
+  atomicallyM = lift . atomicallyM
+
+instance MonadSTM m =>
+         MonadSTM (LoggingT m) where
+  atomicallyM = lift . atomicallyM
+
+instance MonadSTM m =>
+         MonadSTM (RandT StdGen m) where
+  atomicallyM = lift . atomicallyM
 
 ------------------------------------------------------------
-receive
-  :: MonadIO m
-  => ClientConnection -> m WS.DataMessage
-receive = liftIO . WS.receiveDataMessage . view connection
+class Monad m =>
+      MonadTime m  where
+  now :: m UTCTime
+  pause :: NominalDiffTime -> m ()
 
-send
-  :: (ToJSON a, MonadIO m)
+instance MonadTime IO where
+  now = getCurrentTime
+  pause = threadPause
+
+instance MonadTime m =>
+         MonadTime (ResourceT m) where
+  now = lift now
+  pause = lift . pause
+
+instance MonadTime m =>
+         MonadTime (ReaderT a m) where
+  now = lift now
+  pause = lift . pause
+
+instance MonadTime m =>
+         MonadTime (LoggingT m) where
+  now = lift now
+  pause = lift . pause
+
+------------------------------------------------------------
+class Monad m =>
+      MonadWebsocket m  where
+  send :: ClientConnection -> WS.Message -> m ()
+  receive :: ClientConnection -> m WS.DataMessage
+
+instance MonadWebsocket IO where
+  send client msg = liftIO $ WS.send (view connection client) msg
+  receive = liftIO . WS.receiveDataMessage . view connection
+
+instance MonadWebsocket m =>
+         MonadWebsocket (ResourceT m) where
+  send client = lift . send client
+  receive = lift . receive
+
+instance MonadWebsocket m =>
+         MonadWebsocket (RandT StdGen m) where
+  send client = lift . send client
+  receive = lift . receive
+
+instance MonadWebsocket m =>
+         MonadWebsocket (LoggingT m) where
+  send client = lift . send client
+  receive = lift . receive
+
+sendJson
+  :: (MonadWebsocket m, ToJSON a)
   => ClientConnection -> a -> m ()
-send clientConnection value =
-  liftIO $ WS.send (view connection clientConnection) (toMessage value)
-
-------------------------------------------------------------
-genUUID
-  :: Monad m
-  => StateT StdGen m UUID
-genUUID = state random
+sendJson client value = send client (WS.DataMessage . WS.Text . encode $ value)
 
 ------------------------------------------------------------
 genStartPosition
@@ -108,46 +156,43 @@ createPlayer = do
       })
 
 handleCommandFromClient
-  :: (MonadIO m, MonadLogger m)
+  :: (MonadLogger m, MonadTime m, MonadWebsocket m, MonadSTM m)
   => TVar Server -> ClientId -> m ()
 handleCommandFromClient server clientId = do
-  serverState <- liftIO . atomically $ readTVar server
+  serverState <- atomicallyM $ readTVar server
   let Just clientConnection = view (clients . at clientId) serverState
   dataMessage <- receive clientConnection
   handleMessage server clientId dataMessage
 
 handleMessage
-  :: (MonadIO m, MonadLogger m)
+  :: (MonadLogger m, MonadTime m, MonadWebsocket m, MonadSTM m)
   => TVar Server -> ClientId -> WS.DataMessage -> m ()
 handleMessage _ _ (WS.Text "") = pure ()
 handleMessage _ _ (WS.Binary _) = pure ()
 handleMessage server clientId (WS.Text rawMsg) = do
-  serverState <- liftIO . atomically $ readTVar server
-  let mClientConnection = view (clients . at clientId) serverState
-  case mClientConnection of
+  serverState <- atomicallyM $ readTVar server
+  case view (clients . at clientId) serverState of
     Nothing -> logErrorN $ F.sformat ("CONNECTION NOT FOUND: " % F.shown) clientId
     Just clientConnection ->
       case eitherDecode rawMsg of
         Left e -> do
           logErrorN $ F.sformat (F.shown % " - " % F.shown) clientId e
-          send clientConnection helpMessage
+          sendJson clientConnection helpMessage
         Right cmd -> do
           newServerState <-
-            liftIO . atomically $
+            atomicallyM $
             do processGameEvent server (FromPlayer clientId cmd)
                readTVar server
-          send clientConnection (views scene displayScene newServerState)
-          liftIO $ threadPause playerThrottleDelay
+          sendJson clientConnection (views scene displayScene newServerState)
+          pause playerThrottleDelay
 
 ------------------------------------------------------------
-addConnection
+joinPlayer
   :: Monad m
-  => WS.Connection -> StateT Server m ClientId
-addConnection conn = do
-  (newClientId, newPlayer) <- zoom generator (state (runRand createPlayer))
+  => WS.Connection -> ClientId -> Player -> StateT Server m ()
+joinPlayer conn newClientId newPlayer = do
   assign (scene . players . at newClientId) (Just newPlayer)
   assign (clients . at newClientId) (Just (ClientConnection conn))
-  pure newClientId
 
 removeConnection
   :: Monad m
@@ -157,26 +202,34 @@ removeConnection clientId = do
   assign (clients . at clientId) Nothing
 
 clientJoins
-  :: (MonadIO m, MonadLogger m)
+  :: (MonadSTM m, MonadLogger m, MonadWebsocket m, MonadRandom m)
   => TVar Server -> WS.Connection -> m ClientId
-clientJoins server conn = do
-  (clientId, newServerState) <-
-    liftIO . atomically . runStateSTM server $ addConnection conn
+clientJoins serverVar conn = do
+  (clientId, newPlayer) <- createPlayer
+  (_, newServerState) <-
+    atomicallyM . stateTVar serverVar $ joinPlayer conn clientId newPlayer
   logInfoN $ F.sformat ("JOINED: " % F.shown) clientId
   let Just clientConnection = view (clients . at clientId) newServerState
-  send clientConnection helpMessage
-  send clientConnection (views scene displayScene newServerState)
+  sendJson clientConnection helpMessage
+  sendJson clientConnection (views scene displayScene newServerState)
   pure clientId
 
-clientLeaves ::
-   (MonadIO m, MonadLogger m)
+stateTVar :: TVar s -> StateT s STM a -> STM (a, s)
+stateTVar var st = do
+  value <- readTVar var
+  (result, newValue) <- runStateT st value
+  writeTVar var newValue
+  return (result, newValue)
+
+clientLeaves
+  :: (MonadSTM m, MonadLogger m)
   => TVar Server -> ClientId -> m ()
 clientLeaves server clientId = do
-  liftIO . atomically . modifyTVar server . execState $ removeConnection clientId
+  atomicallyM . modifyTVar' server . execState $ removeConnection clientId
   logInfoN $ F.sformat ("DISCONNECTED: " % F.shown) clientId
 
 clientLoop
-  :: (MonadIO m, MonadLogger m)
+  :: (MonadSTM m, MonadLogger m, MonadTime m, MonadWebsocket m)
   => TVar Server -> ClientId -> m ()
 clientLoop server = forever . handleCommandFromClient server
 
@@ -197,32 +250,51 @@ processGameEvent server event =
 ------------------------------------------------------------
 -- TODO The frame rate is actually frameDelay *plus* the time it takes
 --  to get the tick processed. Not ideal.
-gameStep
-  :: MonadIO m
+runGameClock
+  :: (MonadSTM m, MonadTime m)
   => TVar Server -> m ()
-gameStep server = do
-  tick <- liftIO $ Tick <$> getCurrentTime
-  _ <- liftIO . atomically $ processGameEvent server tick
-  liftIO $ threadPause frameDelay
+runGameClock server = do
+  tick <- Tick <$> now
+  _ <- atomicallyM $ processGameEvent server tick
+  pause frameDelay
 
 ------------------------------------------------------------
+instance MonadRandom m =>
+         MonadRandom (LoggingT m) where
+  getRandom = lift getRandom
+  getRandoms = lift getRandoms
+  getRandomR = lift . getRandomR
+  getRandomRs = lift . getRandomRs
+
+instance MonadLogger m => MonadLogger (RandT StdGen m)
+
 acceptClientConnection
-  :: (MonadResource m, MonadLogger m)
+  :: (MonadResource m
+     ,MonadLogger m
+     ,MonadTime m
+     ,MonadWebsocket m
+     ,MonadSTM m
+     ,MonadIO m)
   => TVar Server -> WS.PendingConnection -> m ()
 acceptClientConnection server pendingConnection = do
   (_releaseKey, resource) <-
     allocate
-      (WS.acceptRequest pendingConnection >>= runStdoutLoggingT . clientJoins server)
+      (runStdoutLoggingT $
+       do gen <- liftIO getStdGen
+          conn <- liftIO $ WS.acceptRequest pendingConnection
+          fst <$> runRandT (clientJoins server conn) gen -- TODO
+       )
       (runStdoutLoggingT . clientLeaves server)
   clientLoop server resource
 
 ------------------------------------------------------------
-initServer :: IO (TVar Server)
+initServer
+  :: (MonadTime m, MonadSTM m)
+  => m (TVar Server)
 initServer = do
-  _generator <- getStdGen
-  _scene <- initialScene <$> getCurrentTime
+  _scene <- initialScene <$> now
   _clients <- pure Map.empty
-  atomically $
+  atomicallyM $
     newTVar
       Server
       { ..
@@ -236,26 +308,25 @@ startEkg bindTo = do
   liftIO $ EKG.forkServer (BS.pack (view address bindTo)) (view port bindTo)
 
 runGameServer
-  :: (MonadIO m, MonadLogger m, MonadReader Config m)
-  => m ()
-runGameServer = do
-  ekgPort <- view ekgBindsTo
-  websocketPort <- view (playersBindTo . port)
-  static <- view staticDir
+  :: (MonadIO m, MonadLogger m,  MonadTime m, MonadSTM m)
+  => Config -> m ()
+runGameServer config = do
   logInfoN "Starting EKG"
   _ <- startEkg ekgPort
-  server <- liftIO initServer
-  logInfoN "Starting game loop thread."
-  _ <- liftIO . forkIO . forever $ gameStep server
+  server <- initServer
+  logInfoN "Starting game clock thread."
+  _ <- liftIO . forkIO . forever . runGameClock $ server
   logInfoN $ F.sformat ("Starting webserver on: " % F.int) websocketPort
-  liftIO $
-    Warp.run
-      websocketPort
-      (websocketsOr
-         WS.defaultConnectionOptions
-         (runStdoutLoggingT . runResourceT . acceptClientConnection server)
-         (Rest.application static))
+  liftIO . Warp.run websocketPort $
+    websocketsOr
+      WS.defaultConnectionOptions
+      (runStdoutLoggingT . runResourceT . acceptClientConnection server)
+      (Rest.application static)
   logInfoN "Finished."
+  where
+    ekgPort = view ekgBindsTo config
+    websocketPort = view (playersBindTo . port) config
+    static = view staticDir config
 
 run :: IO ()
-run = loadConfig >>= either print (runStdoutLoggingT . runReaderT runGameServer)
+run = loadConfig >>= either print (runStdoutLoggingT  . runGameServer)
