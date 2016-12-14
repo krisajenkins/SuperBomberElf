@@ -6,7 +6,7 @@ A Super Bomberman clone. Written for [http://www.meetup.com/West-London-Hack-Nig
 
 ## Building & Running
 
-You'll need [stack](https://github.com/commercialhaskell/stack) and [Elm](http://elm-lang.org/).
+You'll need [stack](https://github.com/commercialhaskell/stack) and [Elm 0.18](http://elm-lang.org/).
 
 (Note: If this is the first time you've run `stack`, it might take a
 while to fetch & build the dependencies. Have coffee ready.)
@@ -15,7 +15,7 @@ while to fetch & build the dependencies. Have coffee ready.)
 
 ``` sh
 cd client
-stack runhaskell Shake.hs
+make -w
 ```
 
 ### Backend

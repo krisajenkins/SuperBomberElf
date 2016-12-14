@@ -30,7 +30,7 @@ root model =
             ]
             []
         , link
-            [ href "style.css"
+            [ href "main.css"
             , rel "stylesheet"
             , type_ "text/css"
             ]
