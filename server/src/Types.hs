@@ -24,7 +24,7 @@ import qualified Data.Vector  as V
 import           GHC.Generics
 
 newtype ClientId = ClientId
-  { unCliendId :: UUID
+  { unClientId :: UUID
   } deriving (Show, Eq, Ord)
 
 instance ToJSON ClientId where
