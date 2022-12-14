@@ -1,0 +1,5 @@
+/.shake
+/elm-stuff
+/node_modules
+/dist
+/smake
