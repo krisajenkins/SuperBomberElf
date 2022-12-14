@@ -15,4 +15,4 @@ api :: Proxy API
 api = Proxy
 
 application :: FilePath -> Application
-application = serve api . serveDirectory
+application = serve api . serveDirectoryFileServer

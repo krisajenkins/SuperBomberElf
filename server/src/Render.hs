@@ -44,5 +44,5 @@ displayScene s =
     , ("walls", toJSON (displayWall <$> view walls s))
     , ( "players"
       , toJSON
-          (Map.foldWithKey (\k v b -> displayPlayer k v : b) [] (view players s)))
+          (Map.foldrWithKey (\k v b -> displayPlayer k v : b) [] (view players s)))
     ]

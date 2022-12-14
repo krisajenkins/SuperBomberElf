@@ -31,7 +31,6 @@ library
                      , bytestring
                      , containers
                      , directory
-                     , ekg
                      , lens
                      , mtl
                      , monad-logger

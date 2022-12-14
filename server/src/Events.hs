@@ -25,9 +25,6 @@ type Time = UTCTime
 
 type Schedule = Map Time [Event]
 
-instance ToJSON UUID where
-  toJSON uuid = String . T.pack $ show uuid
-
 data Event
   = AddPlayer UUID
   | SetPlayerName UUID

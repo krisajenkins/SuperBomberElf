@@ -40,7 +40,6 @@ import           Network.Wai.Handler.WebSockets
 import qualified Network.WebSockets             as WS
 import           Render
 import qualified Rest
-import qualified System.Remote.Monitoring       as EKG
 import           Types
 import           Utils
 
@@ -76,7 +75,7 @@ send
   :: (ToJSON a, MonadIO m)
   => ClientConnection -> a -> m ()
 send clientConnection value =
-  liftIO $ WS.send (view connection clientConnection) (toMessage value)
+  liftIO $ WS.sendTextData (view connection clientConnection) (Data.Aeson.encode value)
 
 ------------------------------------------------------------
 genUUID
@@ -112,16 +111,18 @@ handleCommandFromClient
   => TVar Server -> ClientId -> m ()
 handleCommandFromClient server clientId = do
   serverState <- liftIO . atomically $ readTVar server
-  let Just clientConnection = view (clients . at clientId) serverState
-  dataMessage <- receive clientConnection
-  handleMessage server clientId dataMessage
+  case (view (clients . at clientId) serverState) of
+    (Just clientConnection) -> do
+      dataMessage <- receive clientConnection
+      handleMessage server clientId dataMessage
+    Nothing -> pure ()
 
 handleMessage
   :: (MonadIO m, MonadLogger m)
   => TVar Server -> ClientId -> WS.DataMessage -> m ()
-handleMessage _ _ (WS.Text "") = pure ()
+handleMessage _ _ (WS.Text "" _) = pure ()
 handleMessage _ _ (WS.Binary _) = pure ()
-handleMessage server clientId (WS.Text rawMsg) = do
+handleMessage server clientId (WS.Text rawMsg _) = do
   serverState <- liftIO . atomically $ readTVar server
   let mClientConnection = view (clients . at clientId) serverState
   case mClientConnection of
@@ -163,10 +164,11 @@ clientJoins server conn = do
   (clientId, newServerState) <-
     liftIO . atomically . runStateSTM server $ addConnection conn
   logInfoN $ F.sformat ("JOINED: " % F.shown) clientId
-  let Just clientConnection = view (clients . at clientId) newServerState
-  send clientConnection helpMessage
-  send clientConnection (views scene displayScene newServerState)
-  pure clientId
+  case (view (clients . at clientId) newServerState) of
+    Just clientConnection -> do
+      send clientConnection helpMessage
+      send clientConnection (views scene displayScene newServerState)
+      pure clientId
 
 clientLeaves ::
    (MonadIO m, MonadLogger m)
@@ -228,22 +230,12 @@ initServer = do
       { ..
       }
 
-startEkg
-  :: (MonadIO m, MonadLogger m)
-  => BindTo -> m EKG.Server
-startEkg bindTo = do
-  logInfoN $ F.sformat ("Monitoring on port: " % F.shown) bindTo
-  liftIO $ EKG.forkServer (BS.pack (view address bindTo)) (view port bindTo)
-
 runGameServer
   :: (MonadIO m, MonadLogger m, MonadReader Config m)
   => m ()
 runGameServer = do
-  ekgPort <- view ekgBindsTo
   websocketPort <- view (playersBindTo . port)
   static <- view staticDir
-  logInfoN "Starting EKG"
-  _ <- startEkg ekgPort
   server <- liftIO initServer
   logInfoN "Starting game loop thread."
   _ <- liftIO . forkIO . forever $ gameStep server

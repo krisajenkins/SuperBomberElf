@@ -17,11 +17,6 @@ singleton x = [x]
 addTime :: Int -> UTCTime -> UTCTime
 addTime d = addUTCTime (fromIntegral d)
 
-toMessage
-  :: ToJSON a
-  => a -> WS.Message
-toMessage = WS.DataMessage . WS.Text . encode
-
 runStateSTM :: TVar a -> StateT a Identity b -> STM (b, a)
 runStateSTM var f = do
   value <- readTVar var

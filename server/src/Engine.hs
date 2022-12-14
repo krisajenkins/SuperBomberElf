@@ -126,7 +126,7 @@ detonateBombs scene = over (bombs . traverse) detonateBomb scene
 blastSite :: Bomb -> Set Position
 blastSite bomb =
   Set.fromList $
-  Map.foldWithKey reducer [] (fromMaybe Map.empty (unBlast <$> view blast bomb))
+  Map.foldrWithKey reducer [] (fromMaybe Map.empty (unBlast <$> view blast bomb))
   where
     reducer direction count p =
       p <>

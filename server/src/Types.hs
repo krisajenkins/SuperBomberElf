@@ -16,7 +16,6 @@ import           Data.Aeson
 import           Data.Map     (Map)
 import qualified Data.Map     as Map
 import           Data.Maybe
-import           Data.Monoid
 import           Data.Text    as T
 import           Data.Time
 import           Data.UUID
@@ -37,9 +36,12 @@ data Position = Position
 
 makeLenses ''Position
 
+-- TODO This should be derivable, shouldn't it?
+instance Semigroup Position where
+  (Position x1 y1) <> (Position x2 y2) = Position (x1 + x2) (y1 + y2)
+
 instance Monoid Position where
   mempty = Position 0 0
-  mappend (Position x1 y1) (Position x2 y2) = Position (x1 + x2) (y1 + y2)
 
 data Direction
   = North

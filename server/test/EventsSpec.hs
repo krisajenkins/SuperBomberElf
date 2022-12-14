@@ -11,9 +11,6 @@ import           Test.QuickCheck
 import           Test.QuickCheck.Instances ()
 import           Utils
 
-instance Arbitrary UUID where
-  arbitrary = fromWords <$> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary
-
 instance Arbitrary Event where
   arbitrary =
     oneof [AddPlayer <$> arbitrary
