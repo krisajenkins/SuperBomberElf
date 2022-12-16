@@ -1,0 +1,26 @@
+version: "3.8"
+services:
+  super-bomber-elf-client:
+    build: .
+    container_name: super-bomber-elf-client
+    command: >
+      sh -c "cd client && yarn install && make"
+    working_dir: /usr/src
+    volumes:
+      - ./:/usr/src/
+
+  super-bomber-elf-server:
+    build: ./
+    container_name: super-bomber-elf-server
+    command: >
+      sh -c "cd server &&
+             cp bomberman.docker.yaml ~/.bomberman.yaml &&
+             stack build --allow-different-user &&
+             stack exec bomberman"
+    working_dir: /usr/src
+    volumes:
+      - ./:/usr/src
+    ports:
+      - "8080:8080"
+    depends_on:
+      - "super-bomber-elf-client"
