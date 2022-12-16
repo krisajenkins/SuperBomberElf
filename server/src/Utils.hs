@@ -15,7 +15,7 @@ singleton :: a -> [a]
 singleton x = [x]
 
 addTime :: Int -> UTCTime -> UTCTime
-addTime d = addUTCTime (fromIntegral d)
+addTime = addUTCTime . fromIntegral
 
 runStateSTM :: TVar a -> StateT a Identity b -> STM (b, a)
 runStateSTM var f = do
