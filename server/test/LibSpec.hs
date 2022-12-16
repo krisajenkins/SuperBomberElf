@@ -20,12 +20,3 @@ instance Arbitrary Server where
 
 spec :: Spec
 spec = pure ()
-
--- connectionManagementSpec :: Spec
--- connectionManagementSpec =
---   describe "Connection Management" $
---   do it "Generating a UUID ticks StdGen" . property $
---        \(Blind server) ->
---          let (uuid1,server') = runState genUUID server
---              (uuid2,_) = runState genUUID server'
---          in (uuid1 /= uuid2)
